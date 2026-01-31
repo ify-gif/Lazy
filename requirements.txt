@@ -1,0 +1,8 @@
+PyQt6==6.6.1
+requests==2.31.0
+python-dotenv==1.0.1
+supabase==2.3.7
+sounddevice==0.4.6
+numpy==1.26.4
+anthropic==0.19.1
+openai==1.13.3

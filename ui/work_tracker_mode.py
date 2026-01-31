@@ -30,35 +30,42 @@ class WorkTrackerMode(QWidget):
         ov_layout = QVBoxLayout(self.overview_container)
         ov_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        ov_title = QLabel("Create Work Story")
-        ov_title.setStyleSheet("font-size: 24px; font-weight: bold;")
+        ov_title = QLabel("CREATE WORK STORY")
+        ov_title.setStyleSheet("font-size: 28px; font-weight: 800; color: white; margin-bottom: 5px;")
         ov_layout.addWidget(ov_title, alignment=Qt.AlignmentFlag.AlignCenter)
         
         self.history_btn = QPushButton("View Past Stories")
-        self.history_btn.setFixedSize(200, 30)
+        self.history_btn.setFixedSize(200, 35)
+        self.history_btn.setStyleSheet("background: #0f172a; border: 1px solid #1e293b; color: #64748b; font-size: 11px; margin-bottom: 20px;")
+        self.history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.history_btn.clicked.connect(self.show_history)
         ov_layout.addWidget(self.history_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         
-        ov_desc = QLabel("Dictate your story overview and let AI generate a professional Jira story")
-        ov_desc.setStyleSheet("color: #64748b; margin-bottom: 20px;")
+        ov_desc = QLabel("Dictate your overview and let AI generate a professional Jira story instantly.")
+        ov_desc.setStyleSheet("color: #94a3b8; margin-bottom: 30px; font-size: 14px;")
         ov_layout.addWidget(ov_desc, alignment=Qt.AlignmentFlag.AlignCenter)
         
         self.overview_input = QTextEdit()
-        self.overview_input.setPlaceholderText("Record or type your story overview here...")
-        self.overview_input.setFixedSize(500, 200)
+        self.overview_input.setPlaceholderText("Paste requirements or start dictating...")
+        self.overview_input.setFixedSize(600, 250)
+        self.overview_input.setObjectName("ModernInput")
         ov_layout.addWidget(self.overview_input, alignment=Qt.AlignmentFlag.AlignCenter)
         
-        self.record_hold_btn = QPushButton("Hold to Record")
-        self.record_hold_btn.setFixedSize(500, 50)
+        self.record_hold_btn = QPushButton("HOLD TO DICTATE")
+        self.record_hold_btn.setFixedSize(300, 50)
         self.record_hold_btn.setObjectName("RecordHoldButton")
+        self.record_hold_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         # Direct event handling for Hold behavior
         self.record_hold_btn.pressed.connect(self.start_recording_ov)
         self.record_hold_btn.released.connect(self.stop_recording_ov)
         ov_layout.addWidget(self.record_hold_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         
-        self.generate_btn = QPushButton("Generate Story with AI")
-        self.generate_btn.setFixedSize(500, 50)
+        ov_layout.addSpacing(20)
+        
+        self.generate_btn = QPushButton("GENERATE JIRA STORY")
+        self.generate_btn.setFixedSize(300, 50)
         self.generate_btn.setObjectName("PrimaryButton")
+        self.generate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.generate_btn.clicked.connect(self.generate_story)
         ov_layout.addWidget(self.generate_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         

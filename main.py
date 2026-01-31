@@ -4,8 +4,8 @@ import json
 import numpy as np
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QStackedWidget,
-                             QFrame, QSizePolicy, QGraphicsDropShadowEffect)
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QPropertyAnimation, QRect
+                             QFrame, QSizePolicy, QGraphicsDropShadowEffect, QGraphicsOpacityEffect)
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QPropertyAnimation, QRect, QEasingCurve, QSequentialAnimationGroup, QParallelAnimationGroup
 from PyQt6.QtGui import QColor, QPainter, QLinearGradient, QFont
 from dotenv import load_dotenv
 
@@ -45,20 +45,22 @@ class WaveformVisualizer(QWidget):
         
         for i in range(bar_count):
             val = self.data[i]
-            bar_h = val * h * 10
+            bar_h = val * h * 12 # Slightly taller
             if bar_h > h: bar_h = h
-            if bar_h < 4: bar_h = 4
+            if bar_h < 6: bar_h = 6 # Minimum height for presence
             
             x = i * bar_width
             y = (h - bar_h) / 2
             
             gradient = QLinearGradient(0, y, 0, y + bar_h)
-            gradient.setColorAt(0, QColor("#60a5fa"))
-            gradient.setColorAt(1, QColor("#a855f7"))
+            gradient.setColorAt(0, QColor("#60a5fa")) # Brighter blue
+            gradient.setColorAt(0.5, QColor("#8b5cf6")) # Violet middle
+            gradient.setColorAt(1, QColor("#ec4899")) # Pink bottom
             
             painter.setBrush(gradient)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(int(x), int(y), int(bar_width - 2), int(bar_h), 4, 4)
+            # Thinner bars with more gap for that pro look
+            painter.drawRoundedRect(int(x + 2), int(y), int(bar_width - 4), int(bar_h), 5, 5)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -132,13 +134,15 @@ class MainWindow(QMainWindow):
         
         self.logo_btn = QPushButton("LAZY")
         self.logo_btn.setObjectName("TitleLabel")
+        self.logo_btn.setStyleSheet("font-size: 24px; font-weight: 800; color: white; background: transparent; border: none;")
         self.logo_btn.setFlat(True)
-        self.logo_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        self.logo_btn.clicked.connect(lambda: self.switch_mode(0))
         header_layout.addWidget(self.logo_btn)
         
         header_layout.addStretch()
         
         self.settings_btn = QPushButton("Settings")
+        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.open_settings)
         header_layout.addWidget(self.settings_btn)
         
@@ -213,18 +217,33 @@ class MainWindow(QMainWindow):
         m_btn = QPushButton("Meeting Transcription")
         m_btn.setFixedSize(300, 180)
         m_btn.setObjectName("PrimaryButton")
-        m_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        m_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        m_btn.clicked.connect(lambda: self.switch_mode(1))
         
         t_btn = QPushButton("Work Tracker")
         t_btn.setFixedSize(300, 180)
         t_btn.setObjectName("PrimaryButton")
-        t_btn.clicked.connect(lambda: self.stack.setCurrentIndex(2))
+        t_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        t_btn.clicked.connect(lambda: self.switch_mode(2))
         
         btn_layout.addWidget(m_btn)
         btn_layout.addWidget(t_btn)
         
         layout.addLayout(btn_layout)
         return page
+
+    def switch_mode(self, index):
+        # Smooth Fade-in Transition
+        self.eff = QGraphicsOpacityEffect(self.stack)
+        self.stack.setGraphicsEffect(self.eff)
+        self.anim = QPropertyAnimation(self.eff, b"opacity")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(0)
+        self.anim.setEndValue(1)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        self.stack.setCurrentIndex(index)
+        self.anim.start()
 
     def open_settings(self):
         dialog = SettingsDialog(self.settings, self.save_settings, self)
@@ -237,9 +256,9 @@ class MainWindow(QMainWindow):
         if msg_type == "error": color = "#ef4444"
         if msg_type == "warning": color = "#f59e0b"
         
-        self.toast_label.setStyleSheet(f"background: #1e293b; color: white; border-radius: 20px; padding: 0 20px; border: 2px solid {color}; font-weight: bold;")
+        self.toast_label.setStyleSheet(f"background: #1e1b4b; color: #f1f5f9; border-radius: 20px; padding: 0 25px; border: 1px solid {color}; font-weight: 600; font-size: 13px;")
         self.toast_label.adjustSize()
-        self.toast_label.move((self.width() - self.toast_label.width()) // 2, self.height() - 100)
+        self.toast_label.move((self.width() - self.toast_label.width()) // 2, self.height() - 120)
         self.toast_label.show()
         
         QTimer.singleShot(3000, self.toast_label.hide)

@@ -1,31 +1,37 @@
-/* LAZY Premium Stylesheet */
+/* LAZY Elite Pro Design System */
 
 QMainWindow {
-    background-color: #0f172a;
+    background-color: #020617;
 }
 
 QWidget#CentralWidget {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0f172a, stop:1 #1e293b);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #020617, stop:1 #0f172a);
 }
 
 QLabel {
+    color: #94a3b8;
+    font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+
+QLabel#HeaderTitle {
     color: #f8fafc;
-    font-family: 'Segoe UI', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
 }
 
-#TitleLabel {
-    font-size: 28px;
-    font-weight: bold;
-    background: transparent;
-    color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #60a5fa, stop:1 #a855f7);
+QLabel#SubTitle {
+    color: #64748b;
+    font-size: 13px;
 }
 
+/* Glass Buttons */
 QPushButton {
     background-color: #1e293b;
     border: 1px solid #334155;
-    border-radius: 8px;
-    color: #f8fafc;
-    padding: 10px 20px;
+    border-radius: 10px;
+    color: #f1f5f9;
+    padding: 12px 24px;
     font-size: 14px;
     font-weight: 600;
 }
@@ -33,52 +39,90 @@ QPushButton {
 QPushButton:hover {
     background-color: #334155;
     border-color: #475569;
+    color: white;
+}
+
+QPushButton:pressed {
+    background-color: #0f172a;
 }
 
 QPushButton#PrimaryButton {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #2563eb);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #6366f1);
     border: none;
+    color: white;
 }
 
 QPushButton#PrimaryButton:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #60a5fa, stop:1 #3b82f6);
-}
-
-QPushButton#RecordingButton {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ef4444, stop:1 #dc2626);
-    border: none;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #60a5fa, stop:1 #818cf8);
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
 }
 
 QPushButton#RecordHoldButton {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #8b5cf6);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f43f5e, stop:1 #e11d48);
     border: none;
-    min-height: 48px;
+    border-radius: 25px; /* Pill shape */
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
+QPushButton#RecordHoldButton:pressed {
+    background: #be123c;
+    padding-top: 14px; /* Subtle button press effect */
+}
+
+/* Inputs */
 QTextEdit, QLineEdit {
-    background-color: #ffffff;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 8px;
-    color: #1e293b;
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 12px;
+    color: #f8fafc;
     font-size: 14px;
+    selection-background-color: #3b82f6;
 }
 
 QTextEdit:focus, QLineEdit:focus {
-    border-color: #3b82f6;
+    border: 1px solid #3b82f6;
+    background-color: #1e293b;
 }
 
-#TranscriptContainer, #SummaryContainer {
-    background-color: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
+/* Scroll Area & Container */
+QScrollArea {
+    border: none;
+    background: transparent;
 }
 
-#StatusBadge {
-    background-color: #10b981;
-    border-radius: 4px;
-    padding: 2px 6px;
-    color: white;
-    font-weight: bold;
-    font-size: 10px;
+#SummaryContainer, #TranscriptContainer {
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 16px;
+}
+
+/* Custom Scrollbar */
+QScrollBar:vertical {
+    border: none;
+    background: #020617;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #334155;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    border: none;
+    background: none;
+}
+
+/* Modern Toast */
+#ToastLabel {
+    background: #1e293b;
+    border: 1px solid #3b82f6;
+    border-radius: 20px;
+    color: #f8fafc;
+    font-weight: 600;
 }

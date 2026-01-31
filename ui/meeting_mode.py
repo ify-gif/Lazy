@@ -1,5 +1,7 @@
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QDialog
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                             QPushButton, QTextEdit, QFrame, QComboBox, QScrollArea,
+                             QListWidget, QListWidgetItem, QDialog)
 from api_client import APIClient
 from ui.utils import Worker
 
@@ -24,45 +26,65 @@ class MeetingMode(QWidget):
         
         # Toolbar
         toolbar = QHBoxLayout()
+        header_container = QVBoxLayout()
+        meeting_label = QLabel("MEETING TRANSCRIPTION")
+        meeting_label.setStyleSheet("color: #6366f1; font-weight: bold; letter-spacing: 1px; font-size: 11px;")
+        header_container.addWidget(meeting_label)
+        
         self.title_input = QTextEdit()
-        self.title_input.setPlaceholderText("Meeting Title...")
-        self.title_input.setFixedHeight(40)
+        self.title_input.setPlaceholderText("Enter meeting title...")
+        self.title_input.setFixedHeight(45)
+        self.title_input.setObjectName("MeetingTitleInput")
         self.title_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        toolbar.addWidget(self.title_input)
+        header_container.addWidget(self.title_input)
+        toolbar.addLayout(header_container)
         
         toolbar.addStretch()
         
         self.history_btn = QPushButton("History")
+        self.history_btn.setFixedSize(100, 40)
+        self.history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.history_btn.clicked.connect(self.show_history)
         toolbar.addWidget(self.history_btn)
         layout.addLayout(toolbar)
         
         # Controls
-        controls = QHBoxLayout()
-        controls.addWidget(QLabel("Input:"))
+        controls_card = QFrame()
+        controls_card.setObjectName("ControlsCard")
+        controls_card.setStyleSheet("#ControlsCard { background: #0f172a; border-radius: 12px; border: 1px solid #1e293b; }")
+        controls_layout = QHBoxLayout(controls_card)
+        controls_layout.setContentsMargins(15, 10, 15, 10)
+        
+        controls_layout.addWidget(QLabel("INPUT DEVICE:"))
         self.device_combo = QComboBox()
+        self.device_combo.setFixedWidth(250)
         self.load_devices()
-        controls.addWidget(self.device_combo)
+        controls_layout.addWidget(self.device_combo)
+        
+        controls_layout.addSpacing(20)
         
         self.record_btn = QPushButton("Start Recording")
         self.record_btn.setFixedWidth(180)
         self.record_btn.setObjectName("PrimaryButton")
+        self.record_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.record_btn.clicked.connect(self.toggle_recording)
-        controls.addWidget(self.record_btn)
+        controls_layout.addWidget(self.record_btn)
         
         self.timer_label = QLabel("00:00:00")
-        self.timer_label.setStyleSheet("font-family: monospace; font-weight: bold; color: #ef4444;")
+        self.timer_label.setStyleSheet("font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 16px; font-weight: bold; color: #ef4444; margin-left: 10px;")
         self.timer_label.hide()
-        controls.addWidget(self.timer_label)
+        controls_layout.addWidget(self.timer_label)
         
-        controls.addStretch()
+        controls_layout.addStretch()
         
-        self.save_btn = QPushButton("Save")
+        self.save_btn = QPushButton("Save To Cloud")
+        self.save_btn.setObjectName("SuccessButton")
+        self.save_btn.setStyleSheet("background: #10b981; border: none; font-weight: bold;")
         self.save_btn.clicked.connect(self.save_transcript)
         self.save_btn.hide()
-        controls.addWidget(self.save_btn)
+        controls_layout.addWidget(self.save_btn)
         
-        layout.addLayout(controls)
+        layout.addWidget(controls_card)
         
         # Content Area
         content = QHBoxLayout()

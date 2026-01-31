@@ -1,9 +1,8 @@
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextEdit, QFrame, QComboBox, QScrollArea,
-                             QListWidget, QListWidgetItem, QDialog)
-from api_client import APIClient
-from ui.utils import Worker
+                             QListWidget, QListWidgetItem, QDialog, QLineEdit)
+from ui.utils import Worker, LoadingDialog, IndustrialToggleSwitch
 
 class MeetingMode(QWidget):
     def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, parent=None):
@@ -26,65 +25,43 @@ class MeetingMode(QWidget):
         
         # Toolbar
         toolbar = QHBoxLayout()
-        header_container = QVBoxLayout()
-        meeting_label = QLabel("MEETING TRANSCRIPTION")
-        meeting_label.setStyleSheet("color: #6366f1; font-weight: bold; letter-spacing: 1px; font-size: 11px;")
-        header_container.addWidget(meeting_label)
-        
         self.title_input = QTextEdit()
-        self.title_input.setPlaceholderText("Enter meeting title...")
-        self.title_input.setFixedHeight(45)
-        self.title_input.setObjectName("MeetingTitleInput")
+        self.title_input.setPlaceholderText("Meeting Title...")
+        self.title_input.setFixedHeight(40)
         self.title_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        header_container.addWidget(self.title_input)
-        toolbar.addLayout(header_container)
+        toolbar.addWidget(self.title_input)
         
         toolbar.addStretch()
         
-        self.history_btn = QPushButton("History")
-        self.history_btn.setFixedSize(100, 40)
-        self.history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.history_btn = QPushButton("📋 History")
         self.history_btn.clicked.connect(self.show_history)
         toolbar.addWidget(self.history_btn)
         layout.addLayout(toolbar)
         
         # Controls
-        controls_card = QFrame()
-        controls_card.setObjectName("ControlsCard")
-        controls_card.setStyleSheet("#ControlsCard { background: #0f172a; border-radius: 12px; border: 1px solid #1e293b; }")
-        controls_layout = QHBoxLayout(controls_card)
-        controls_layout.setContentsMargins(15, 10, 15, 10)
-        
-        controls_layout.addWidget(QLabel("INPUT DEVICE:"))
+        controls = QHBoxLayout()
+        controls.addWidget(QLabel("Input:"))
         self.device_combo = QComboBox()
-        self.device_combo.setFixedWidth(250)
         self.load_devices()
-        controls_layout.addWidget(self.device_combo)
-        
-        controls_layout.addSpacing(20)
-        
-        self.record_btn = QPushButton("Start Recording")
-        self.record_btn.setFixedWidth(180)
-        self.record_btn.setObjectName("PrimaryButton")
-        self.record_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.record_btn.clicked.connect(self.toggle_recording)
-        controls_layout.addWidget(self.record_btn)
+        controls.addWidget(self.device_combo)
+
+        self.record_btn = IndustrialToggleSwitch()
+        self.record_btn.toggled.connect(self.toggle_recording)
+        controls.addWidget(self.record_btn)
         
         self.timer_label = QLabel("00:00:00")
-        self.timer_label.setStyleSheet("font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 16px; font-weight: bold; color: #ef4444; margin-left: 10px;")
+        self.timer_label.setStyleSheet("font-family: monospace; font-weight: bold; color: #ef4444;")
         self.timer_label.hide()
-        controls_layout.addWidget(self.timer_label)
+        controls.addWidget(self.timer_label)
         
-        controls_layout.addStretch()
+        controls.addStretch()
         
-        self.save_btn = QPushButton("Save To Cloud")
-        self.save_btn.setObjectName("SuccessButton")
-        self.save_btn.setStyleSheet("background: #10b981; border: none; font-weight: bold;")
+        self.save_btn = QPushButton("💾 Save")
         self.save_btn.clicked.connect(self.save_transcript)
         self.save_btn.hide()
-        controls_layout.addWidget(self.save_btn)
+        controls.addWidget(self.save_btn)
         
-        layout.addWidget(controls_card)
+        layout.addLayout(controls)
         
         # Content Area
         content = QHBoxLayout()
@@ -98,11 +75,11 @@ class MeetingMode(QWidget):
         
         # Actions under transcript
         actions = QHBoxLayout()
-        self.summary_btn = QPushButton("Generate AI Summary")
+        self.summary_btn = QPushButton("✨ Generate AI Summary")
         self.summary_btn.clicked.connect(self.generate_summary)
         actions.addWidget(self.summary_btn)
-        
-        self.export_btn = QPushButton("Export")
+
+        self.export_btn = QPushButton("📤 Export")
         actions.addWidget(self.export_btn)
         transcript_container.addLayout(actions)
         
@@ -128,25 +105,17 @@ class MeetingMode(QWidget):
             if dev['max_input_channels'] > 0:
                 self.device_combo.addItem(dev['name'], i)
 
-    def toggle_recording(self):
-        if not self.audio_engine.is_recording():
+    def toggle_recording(self, is_on):
+        if is_on:
             device_id = self.device_combo.currentData()
             self.audio_engine.start_recording(device_id)
-            self.record_btn.setText("Stop Recording")
-            self.record_btn.setObjectName("RecordingButton")
-            self.record_btn.setProperty("class", "recording") # For QSS
-            self.record_btn.style().unpolish(self.record_btn)
-            self.record_btn.style().polish(self.record_btn)
-            
             self.seconds_elapsed = 0
             self.timer_label.show()
             self.timer.start(1000)
-            self.on_toast("Recording started", "info")
+            self.on_toast("🎤 Recording started", "info")
         else:
             self.timer.stop()
-            self.record_btn.setText("Transcribing...")
             self.record_btn.setEnabled(False)
-            
             path = self.audio_engine.stop_recording()
             self.transcribe(path)
 
@@ -160,72 +129,126 @@ class MeetingMode(QWidget):
     def transcribe(self, path):
         api_client = self.get_api_client()
         if not api_client:
-            self.on_toast("API keys not configured", "error")
+            self.on_toast("API key not configured. Open Settings to add your API key.", "error")
+            self.audio_engine.cleanup_temp_file(path)
             self.reset_record_btn()
             return
-            
-        self.on_toast("Transcribing audio...", "info")
+
+        self._current_audio_path = path
+        self._loading_dialog = LoadingDialog("🎤 Transcribing your audio...", self)
+        self._loading_dialog.show()
+
         self.worker = Worker(api_client.transcribe_audio, path)
         self.worker.finished.connect(self.on_transcription_success)
         self.worker.error.connect(self.on_worker_error)
         self.worker.start()
 
     def on_transcription_success(self, text):
+        if hasattr(self, '_loading_dialog'):
+            self._loading_dialog.close()
         self.transcript_edit.setPlainText(text)
-        self.on_toast("Transcription complete", "success")
+        self.on_toast("✓ Transcription complete", "success")
         self.save_btn.show()
         self.reset_record_btn()
+        if hasattr(self, '_current_audio_path'):
+            self.audio_engine.cleanup_temp_file(self._current_audio_path)
 
     def generate_summary(self):
         transcript = self.transcript_edit.toPlainText()
-        if not transcript: return
-        
+        if not transcript:
+            self.on_toast("No transcript to summarize. Record a meeting first.", "warning")
+            return
+
         api_client = self.get_api_client()
         if not api_client:
-            self.on_toast("API keys not configured", "error")
+            self.on_toast("API key not configured. Open Settings to add your API key.", "error")
             return
-            
-        self.on_toast("Generating summary...", "info")
+
+        self._loading_dialog = LoadingDialog("✨ Generating AI summary...", self)
+        self._loading_dialog.show()
+
         self.worker = Worker(api_client.generate_meeting_summary, transcript)
         self.worker.finished.connect(self.on_summary_success)
         self.worker.error.connect(self.on_worker_error)
         self.worker.start()
 
     def on_summary_success(self, summary):
+        if hasattr(self, '_loading_dialog'):
+            self._loading_dialog.close()
         self.summary_view.setPlainText(summary)
-        self.on_toast("Summary generated", "success")
+        self.on_toast("✓ Summary generated", "success")
 
     def on_worker_error(self, message):
-        self.on_toast(message, "error")
+        if hasattr(self, '_loading_dialog'):
+            self._loading_dialog.close()
+        # Provide helpful error messages
+        if "401" in message or "Invalid" in message or "unauthorized" in message.lower():
+            self.on_toast("Invalid API key. Check Settings and try again.", "error")
+        elif "timeout" in message.lower() or "connection" in message.lower():
+            self.on_toast("Network error. Check your connection and try again.", "error")
+        else:
+            self.on_toast(f"Error: {message}", "error")
         self.reset_record_btn()
+        if hasattr(self, '_current_audio_path'):
+            self.audio_engine.cleanup_temp_file(self._current_audio_path)
 
     def show_history(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("Meeting History")
         dialog.setFixedSize(500, 400)
+        dialog.setStyleSheet("background-color: #000000;")
         layout = QVBoxLayout(dialog)
-        
-        list_widget = QListWidget()
+
         items = self.db_manager.get_transcripts()
-        for item in items:
-            list_item = QListWidgetItem(f"{item['title']} ({item['recording_date'][:10]})")
-            list_item.setData(Qt.ItemDataRole.UserRole, item)
-            list_widget.addItem(list_item)
-            
-        layout.addWidget(list_widget)
-        
-        load_btn = QPushButton("Load Selected")
-        def load():
-            curr = list_widget.currentItem()
-            if curr:
-                data = curr.data(Qt.ItemDataRole.UserRole)
-                self.title_input.setPlainText(data['title'])
-                self.transcript_edit.setPlainText(data['content'])
-                self.summary_view.setPlainText(data['summary'])
-                dialog.accept()
-        
-        load_btn.clicked.connect(load)
-        layout.addWidget(load_btn)
+
+        if not items:
+            # Empty state
+            empty_label = QLabel("📝 No meetings recorded yet\n\nStart recording to build your history")
+            empty_label.setStyleSheet("color: #64748b; font-size: 14px; padding: 40px;")
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(empty_label)
+        else:
+            # Search bar
+            search_layout = QHBoxLayout()
+            search_input = QLineEdit()
+            search_input.setPlaceholderText("🔍 Search meetings...")
+            search_input.setStyleSheet("background-color: #0a0a0a; color: #e4e4e7; border: 1px solid #27272a; padding: 5px; border-radius: 4px;")
+            search_layout.addWidget(search_input)
+            layout.addLayout(search_layout)
+
+            list_widget = QListWidget()
+            list_widget.setStyleSheet("background-color: #0a0a0a; color: #e4e4e7; border: 1px solid #27272a;")
+
+            def populate_list(search_text=""):
+                list_widget.clear()
+                search_lower = search_text.lower()
+                for item in items:
+                    title = item['title'].lower()
+                    date = item['recording_date'][:10]
+                    if search_lower in title or search_lower in date:
+                        list_item = QListWidgetItem(f"📌 {item['title']} ({date})")
+                        list_item.setData(Qt.ItemDataRole.UserRole, item)
+                        list_widget.addItem(list_item)
+
+            search_input.textChanged.connect(lambda text: populate_list(text))
+            populate_list()
+            layout.addWidget(list_widget)
+
+            load_btn = QPushButton("📂 Load Selected")
+            load_btn.setObjectName("PrimaryButton")
+
+            def load():
+                curr = list_widget.currentItem()
+                if curr:
+                    data = curr.data(Qt.ItemDataRole.UserRole)
+                    self.title_input.setPlainText(data['title'])
+                    self.transcript_edit.setPlainText(data['content'])
+                    self.summary_view.setPlainText(data['summary'])
+                    dialog.accept()
+
+            load_btn.clicked.connect(load)
+            layout.addWidget(load_btn)
+
         dialog.exec()
 
     def save_transcript(self):
@@ -248,9 +271,6 @@ class MeetingMode(QWidget):
             self.on_toast(f"Failed to save: {str(e)}", "error")
 
     def reset_record_btn(self):
-        self.record_btn.setText("Start Recording")
-        self.record_btn.setObjectName("PrimaryButton")
+        self.record_btn.set_on(False)
         self.record_btn.setEnabled(True)
-        self.record_btn.style().unpolish(self.record_btn)
-        self.record_btn.style().polish(self.record_btn)
         self.timer_label.hide()

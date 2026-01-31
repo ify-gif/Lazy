@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaZy Landing</title>
+    <script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.59/build/spline-viewer.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        body.loaded {
+            opacity: 1;
+        }
+
+        spline-viewer {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            background-color: black;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #gradient-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, transparent 30%, black 100%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .content {
+            text-align: center;
+            color: white;
+            pointer-events: auto;
+            margin-top: 100px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 200;
+            margin: 0 0 1rem 0;
+            letter-spacing: -0.02em;
+            text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        p {
+            font-size: 1.2rem;
+            font-weight: 300;
+            color: rgba(255, 255, 255, 0.7);
+            max-width: 700px;
+            margin: 0 auto 2.5rem auto;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+        }
+
+        b {
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+            margin-top: 2.5rem;
+        }
+
+        /* --- STAR BUTTON STYLES --- */
+        @keyframes star-btn-move {
+            0% {
+                offset-distance: 0%;
+            }
+
+            100% {
+                offset-distance: 100%;
+            }
+        }
+
+        .star-btn {
+            position: relative;
+            z-index: 3;
+            overflow: hidden;
+            height: 48px;
+            padding: 0 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            white-space: nowrap;
+            border-radius: 24px;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: transform 0.2s ease;
+            background: #000;
+            border: none;
+            cursor: pointer;
+            isolation: isolate;
+            text-decoration: none;
+            --light-width: 80px;
+            --light-color: #ffffff;
+            --duration: 4s;
+        }
+
+        .star-btn:hover {
+            transform: scale(1.02);
+        }
+
+        .star-btn .light-trail {
+            position: absolute;
+            inset: 0;
+            width: var(--light-width);
+            height: var(--light-width);
+            background: radial-gradient(circle at center, var(--light-color), transparent 70%);
+            offset-path: var(--path);
+            animation: star-btn-move var(--duration) linear infinite;
+            z-index: 1;
+            filter: blur(4px);
+            opacity: 0.8;
+        }
+
+        .btn-reverse .light-trail {
+            animation-direction: reverse;
+        }
+
+        .star-btn .bg-mask {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            border-radius: inherit;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+
+        .star-btn svg {
+            width: 101%;
+            height: 101%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .star-btn span {
+            position: relative;
+            z-index: 10;
+            background: linear-gradient(180deg, #ffffff 0%, #a3a3a3 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            font-family: inherit;
+        }
+    </style>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+</head>
+
+<body>
+    <div id="gradient-overlay"></div>
+    <spline-viewer url="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode"></spline-viewer>
+
+    <div id="overlay">
+        <div
+            style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; width: 100%; z-index: 20; padding: 20px; box-sizing: border-box;">
+
+            <img src="icon.png" alt="LAZY Logo"
+                style="max-height: 40vh; width: auto; max-width: 90%; margin-bottom: 2rem; filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));">
+
+            <div class="content" id="main-content">
+                <h1>An enterprise-grade solution for <b>Herch</b></h1>
+                <p>With logo inspiration from <b>Sid</b> and executive sponsorship by Big Daddy <b>Ryan</b></p>
+
+                <div class="btn-container">
+                    <button class="star-btn" onclick="navigate(1)">
+                        <div class="light-trail"></div>
+                        <div class="bg-mask">
+                            <svg viewBox="0 0 138.6 46.2" preserveAspectRatio="none">
+                                <path fill-rule="evenodd" clip-rule="evenodd"
+                                    d="M31.68 26.02c-.3645 0-.66.2952-.66.66s.2955.66.66.66.66-.2952.66-.66-.2955-.66-.66-.66zm24.42-22.06c.3645 0 .66.29519.66.66s-.2955.66-.66.66c-.1869 0-.3557-.07799-.476-.20238-.0608-.06316-.1093-.13858-.1411-.22172-.0277-.07347-.0429-.15275-.0429-.2359 0-.0651.0094-.12826.0268-.18756.0238-.08056.0624-.15469.1127-.21915.1209-.15403.309-.25329.5205-.25329zm-15.84 13.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm34.32-11.88c.1901 0 .3613.08057.4818.20882.0112.01161.0219.02386.0322.03675.0148.01869.0291.03802.0419.058.012.01934.0236.03996.0352.06225.0116.02128.0219.04319.0311.06575.032.07734.0494.16178.0494.25072 0 .2185-.1064.4125-.2701.53238-.0541.03996-.1144.07155-.1791.09346-.0661.02191-.137.03416-.2108.03416-.3644 0-.66-.29519-.66-.66 0-.06316.009-.1244.0255-.1824.0141-.04898.0335-.09539.0577-.13857.0625-.11215.1563-.20432.2696-.26362.0919-.04834.1963-.07541.3072-.07541zm-52.92 28.24c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM7.5 32.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm0-9.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm11.16-5.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-13-.64c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm29.5 23.66c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm18.34.68c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-5-7.52c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM60.34 27.34c.3705 0 .6705.3.6705.6705s-.3.6705-.6705.6705-.6705-.3-.6705-.6705.3-.6705.6705-.6705zm-4.056-10.84c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-10.084-9.24c.3645 0 .66.2952.66.66 0 .36481-.2955.66-.66.66s-.2955-.66-.66-.66-.66-.29519-.66-.66c0-.36481.2955-.66.66-.66zm-13.2 2.08c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM16 4.8559c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm53.66 16.3c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm10.86-5.98c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM77.5 34.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm8.16-10.5c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm5.66-14.34c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm47.28-10H0V46.2h138.6V0zm-45.96 34.84c0-.3648.66-.66.66-.66s.66.2952.66.66-.2955.66-.66.66-.66-.2952-.66-.66z"
+                                    fill="#000" />
+                            </svg>
+                        </div>
+                        <span>Meeting Transcription</span>
+                    </button>
+
+                    <button class="star-btn btn-reverse" onclick="navigate(2)">
+                        <div class="light-trail"></div>
+                        <div class="bg-mask">
+                            <svg viewBox="0 0 138.6 46.2" preserveAspectRatio="none">
+                                <path fill-rule="evenodd" clip-rule="evenodd"
+                                    d="M31.68 26.02c-.3645 0-.66.2952-.66.66s.2955.66.66.66.66-.2952.66-.66-.2955-.66-.66-.66zm24.42-22.06c.3645 0 .66.29519.66.66s-.2955.66-.66.66c-.1869 0-.3557-.07799-.476-.20238-.0608-.06316-.1093-.13858-.1411-.22172-.0277-.07347-.0429-.15275-.0429-.2359 0-.0651.0094-.12826.0268-.18756.0238-.08056.0624-.15469.1127-.21915.1209-.15403.309-.25329.5205-.25329zm-15.84 13.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm34.32-11.88c.1901 0 .3613.08057.4818.20882.0112.01161.0219.02386.0322.03675.0148.01869.0291.03802.0419.058.012.01934.0236.03996.0352.06225.0116.02128.0219.04319.0311.06575.032.07734.0494.16178.0494.25072 0 .2185-.1064.4125-.2701.53238-.0541.03996-.1144.07155-.1791.09346-.0661.02191-.137.03416-.2108.03416-.3644 0-.66-.29519-.66-.66 0-.06316.009-.1244.0255-.1824.0141-.04898.0335-.09539.0577-.13857.0625-.11215.1563-.20432.2696-.26362.0919-.04834.1963-.07541.3072-.07541zm-52.92 28.24c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM7.5 32.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm0-9.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm11.16-5.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-13-.64c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm29.5 23.66c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm18.34.68c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-5-7.52c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM60.34 27.34c.3705 0 .6705.3.6705.6705s-.3.6705-.6705.6705-.6705-.3-.6705-.6705.3-.6705.6705-.6705zm-4.056-10.84c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-10.084-9.24c.3645 0 .66.2952.66.66 0 .36481-.2955.66-.66.66s-.2955-.66-.66-.66-.66-.29519-.66-.66c0-.36481.2955-.66.66-.66zm-13.2 2.08c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM16 4.8559c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm53.66 16.3c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm10.86-5.98c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM77.5 34.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm8.16-10.5c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm5.66-14.34c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm47.28-10H0V46.2h138.6V0zm-45.96 34.84c0-.3648.66-.66.66-.66s.66.2952.66.66-.2955.66-.66.66-.66-.2952-.66-.66z"
+                                    fill="#000" />
+                            </svg>
+                        </div>
+                        <span>Work Tracker</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var backend = null;
+        if (typeof QWebChannel !== "undefined") {
+            new QWebChannel(qt.webChannelTransport, function (channel) {
+                backend = channel.objects.backend;
+            });
+        }
+
+        function navigate(index) {
+            if (backend) { backend.navigate(index); }
+            else { console.log("Navigating to:", index); }
+        }
+
+        function updatePath() {
+            document.querySelectorAll('.star-btn').forEach(btn => {
+                const w = btn.offsetWidth;
+                const h = btn.offsetHeight;
+                const path = `path('M 24 0 H ${w - 24} A 24 24 0 0 1 ${w} 24 A 24 24 0 0 1 ${w - 24} 48 H 24 A 24 24 0 0 1 0 24 A 24 24 0 0 1 24 0')`;
+                btn.style.setProperty('--path', path);
+                const trail = btn.querySelector('.light-trail');
+                if (trail) { trail.style.offsetPath = path; }
+            });
+        }
+
+        function setLoaded() {
+            document.body.classList.add('loaded');
+            updatePath();
+        }
+
+        window.addEventListener('load', setLoaded);
+        window.addEventListener('resize', updatePath);
+        // Safety triggers to ensure the page shows even if 'load' is delayed
+        setTimeout(setLoaded, 100);
+        setTimeout(setLoaded, 500);
+        setTimeout(setLoaded, 1000);
+    </script>
+</body>
+
+</html>

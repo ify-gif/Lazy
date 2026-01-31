@@ -1,128 +1,136 @@
-/* LAZY Elite Pro Design System */
-
-QMainWindow {
-    background-color: #020617;
+/* Global Overrides to remove focus outlines (purple dashed lines) */
+*:focus {
+    outline: none;
 }
 
-QWidget#CentralWidget {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #020617, stop:1 #0f172a);
+#CentralWidget {
+    background-color: #000000; /* Pure Black Background */
+    border: 1px solid #ffffff; /* Sharp White Frame */
+}
+
+#LogoIconButton {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+#LogoIconButton:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+}
+
+/* Base Widget Styling */
+QWidget {
+    color: #a1a1aa; /* Zinc-400 for secondary text */
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
 }
 
 QLabel {
-    color: #94a3b8;
-    font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
-    font-size: 14px;
+    color: #e4e4e7; /* Zinc-200 for primary text */
 }
 
-QLabel#HeaderTitle {
-    color: #f8fafc;
-    font-size: 24px;
-    font-weight: 700;
-}
-
-QLabel#SubTitle {
-    color: #64748b;
-    font-size: 13px;
-}
-
-/* Glass Buttons */
-QPushButton {
-    background-color: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 10px;
-    color: #f1f5f9;
-    padding: 12px 24px;
-    font-size: 14px;
-    font-weight: 600;
-}
-
-QPushButton:hover {
-    background-color: #334155;
-    border-color: #475569;
-    color: white;
-}
-
-QPushButton:pressed {
-    background-color: #0f172a;
-}
-
-QPushButton#PrimaryButton {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #6366f1);
+/* Card/Frame Styles */
+QFrame {
     border: none;
-    color: white;
 }
 
-QPushButton#PrimaryButton:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #60a5fa, stop:1 #818cf8);
-    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
-}
-
-QPushButton#RecordHoldButton {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f43f5e, stop:1 #e11d48);
-    border: none;
-    border-radius: 25px; /* Pill shape */
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-QPushButton#RecordHoldButton:pressed {
-    background: #be123c;
-    padding-top: 14px; /* Subtle button press effect */
+#SummaryContainer {
+    background-color: #09090b; /* Zinc-950 */
+    border-radius: 12px;
+    border: 1px solid #27272a; /* Zinc-800 */
 }
 
 /* Inputs */
-QTextEdit, QLineEdit {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 10px;
+QTextEdit, QLineEdit, QComboBox, QSpinBox {
+    background-color: #000000;
+    border: 1px solid #27272a; /* Zinc-800 */
+    border-radius: 8px;
     padding: 12px;
-    color: #f8fafc;
-    font-size: 14px;
-    selection-background-color: #3b82f6;
+    color: #ffffff;
+    selection-background-color: #ffffff;
+    selection-color: #000000;
 }
 
 QTextEdit:focus, QLineEdit:focus {
-    border: 1px solid #3b82f6;
-    background-color: #1e293b;
+    border: 1px solid #71717a; /* Zinc-500 */
 }
 
-/* Scroll Area & Container */
+/* Buttons */
+QPushButton {
+    background-color: #000000;
+    color: #ffffff;
+    border: 1px solid #27272a; /* Zinc-800 */
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+QPushButton:hover {
+    background-color: #18181b; /* Zinc-900 */
+    border-color: #52525b; /* Zinc-600 */
+}
+
+QPushButton:pressed {
+    background-color: #27272a; /* Zinc-800 */
+}
+
+/* Primary/Action Buttons - Gradient Style from Hero */
+#PrimaryButton {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255,255,255,0.1), stop:1 rgba(255,255,255,0.05));
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #ffffff;
+}
+
+#PrimaryButton:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255,255,255,0.15), stop:1 rgba(255,255,255,0.1));
+    border: 1px solid rgba(255,255,255,0.4);
+}
+
+/* Recording Button */
+#RecordingButton {
+    background-color: #000000;
+    border: 1px solid #ef4444;
+    color: #ef4444;
+}
+
+#RecordingButton:hover {
+    background-color: #1f1212;
+}
+
+#RecordHoldButton {
+    background-color: #000000;
+    border: 1px solid #ffffff;
+    color: #ffffff;
+    border-radius: 25px; /* Pill shape */
+}
+
+#RecordHoldButton:pressed {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #ffffff;
+}
+
+/* Scroll area */
 QScrollArea {
     border: none;
     background: transparent;
 }
 
-#SummaryContainer, #TranscriptContainer {
-    background-color: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 16px;
-}
-
-/* Custom Scrollbar */
 QScrollBar:vertical {
     border: none;
-    background: #020617;
-    width: 10px;
-    margin: 0px;
+    background: #000000;
+    width: 6px;
+    margin: 0;
 }
 
 QScrollBar::handle:vertical {
-    background: #334155;
+    background: #27272a;
     min-height: 20px;
-    border-radius: 5px;
+    border-radius: 3px;
 }
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    border: none;
-    background: none;
-}
-
-/* Modern Toast */
-#ToastLabel {
-    background: #1e293b;
-    border: 1px solid #3b82f6;
-    border-radius: 20px;
-    color: #f8fafc;
-    font-weight: 600;
+    height: 0px;
 }

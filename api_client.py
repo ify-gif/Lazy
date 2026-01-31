@@ -1,7 +1,7 @@
 import requests
 import json
 import re
-from typing import Dict, Optional
+from typing import Dict
 
 class APIClient:
     def __init__(self, openai_api_key: str, 
@@ -52,30 +52,32 @@ Transcript:
         return self._call_gpt(prompt)
 
     def generate_story_from_overview(self, overview: str) -> Dict[str, str]:
-        prompt = f"""You are helping create a Jira story. Convert this dictated overview into:
+        prompt = f"""You are helping create a Jira story. Convert this dictated overview into a JSON object with exactly two fields:
 
-1. SUMMARY: A concise title (50-100 characters, action-oriented, no period at end)
-2. DESCRIPTION: A clear 2-4 sentence description with context and purpose
+- "summary": A concise title (50-100 characters, action-oriented, no period at end)
+- "description": A clear 2-4 sentence description with context and purpose
 
 Overview:
 {overview}
 
-Format your response exactly as:
-SUMMARY
-[Generated summary text]
+Return ONLY valid JSON, no markdown or other formatting."""
 
-DESCRIPTION
-[Generated description text]"""
-        
-        response = self._call_gpt(prompt)
-        
-        summary_match = re.search(r'SUMMARY\s*\n(.*?)(?=\n\nDESCRIPTION|\n*$)', response, re.DOTALL)
-        description_match = re.search(r'DESCRIPTION\s*\n(.*?)$', response, re.DOTALL)
-        
-        return {
-            'summary': summary_match.group(1).strip() if summary_match else '',
-            'description': description_match.group(1).strip() if description_match else ''
-        }
+        response = self._call_gpt(prompt, json_mode=True)
+
+        try:
+            data = json.loads(response)
+            return {
+                'summary': data.get('summary', ''),
+                'description': data.get('description', '')
+            }
+        except json.JSONDecodeError:
+            # Fallback to regex parsing if JSON fails
+            summary_match = re.search(r'SUMMARY\s*\n(.*?)(?=\n\nDESCRIPTION|\n*$)', response, re.DOTALL)
+            description_match = re.search(r'DESCRIPTION\s*\n(.*?)$', response, re.DOTALL)
+            return {
+                'summary': summary_match.group(1).strip() if summary_match else '',
+                'description': description_match.group(1).strip() if description_match else ''
+            }
 
     def polish_comment(self, comment: str) -> str:
         prompt = f"""You are helping add a comment to a Jira story. Polish this dictated comment into a professional, well-structured paragraph.
@@ -94,7 +96,7 @@ Raw dictation:
 Return only the polished comment text, no prefix or formatting."""
         return self._call_gpt(prompt)
 
-    def _call_gpt(self, prompt: str) -> str:
+    def _call_gpt(self, prompt: str, json_mode: bool = False) -> str:
         url = 'https://api.openai.com/v1/chat/completions'
         headers = {
             'Content-Type': 'application/json',
@@ -108,10 +110,13 @@ Return only the polished comment text, no prefix or formatting."""
             ],
             'temperature': 0.7
         }
-        
+
+        if json_mode:
+            data['response_format'] = {'type': 'json_object'}
+
         response = requests.post(url, headers=headers, json=data)
-        
+
         if not response.ok:
             raise Exception(f"OpenAI API failed: {response.text}")
-            
+
         return response.json()['choices'][0]['message']['content']

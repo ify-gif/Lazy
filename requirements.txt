@@ -1,7 +1,8 @@
 PyQt6>=6.7.1
+PyQt6-WebEngine>=6.7.0
 requests>=2.32.3
 python-dotenv>=1.0.1
 sounddevice>=0.4.6
 soundfile>=0.12.1
 numpy>=2.1.0
-openai>=1.50.0
+keyring>=25.0.0

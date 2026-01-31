@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import List, Dict
 
 class DatabaseManager:
+    ALLOWED_TABLES = {'transcripts', 'work_stories'}
+
     def __init__(self, db_name: str = "lazy_data.db"):
         self.db_path = os.path.join(os.path.expanduser("~"), db_name)
         self.init_db()
@@ -88,6 +90,8 @@ class DatabaseManager:
             return stories
 
     def delete_item(self, table: str, item_id: int):
+        if table not in self.ALLOWED_TABLES:
+            raise ValueError(f"Invalid table name: {table}")
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f'DELETE FROM {table} WHERE id = ?', (item_id,))

@@ -12,7 +12,7 @@ class AudioEngine:
         self.recording = False
         self.audio_data = []
         self.stream: Optional[sd.InputStream] = None
-        self._temp_file = None
+        self._temp_files: list[str] = []
         self.on_data: Optional[Callable[[np.ndarray], None]] = None
 
     def get_audio_devices(self):
@@ -54,9 +54,25 @@ class AudioEngine:
         # Save to a temporary webm-like file (Whisper likes .wav or .mp3, let's use .wav for safety)
         fd, path = tempfile.mkstemp(suffix='.wav')
         os.close(fd)
-        
+
         sf.write(path, full_audio, self.samplerate)
+        self._temp_files.append(path)
         return path
+
+    def cleanup_temp_file(self, path: str):
+        """Remove a specific temp file after it's been processed."""
+        try:
+            if path in self._temp_files:
+                self._temp_files.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
+        except OSError:
+            pass
+
+    def cleanup_all_temp_files(self):
+        """Remove all tracked temp files."""
+        for path in self._temp_files[:]:
+            self.cleanup_temp_file(path)
 
     def is_recording(self) -> bool:
         return self.recording

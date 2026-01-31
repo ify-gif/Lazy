@@ -1,15 +1,22 @@
 import sys
 import os
 import json
-import numpy as np
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+import ctypes
+import keyring
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QStackedWidget,
-                             QFrame, QSizePolicy, QGraphicsDropShadowEffect, QGraphicsOpacityEffect)
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QPropertyAnimation, QRect, QEasingCurve, QSequentialAnimationGroup, QParallelAnimationGroup
-from PyQt6.QtGui import QColor, QPainter, QLinearGradient, QFont
+                             QFrame, QSizePolicy)
+from PyQt6.QtCore import Qt, QSize, QTimer, QUrl, QObject, pyqtSlot
+from PyQt6.QtGui import QColor, QPainter, QLinearGradient, QFont, QIcon
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings
+from PyQt6.QtWebChannel import QWebChannel
 from dotenv import load_dotenv
 
-load_dotenv() # Load environment variables from .env
+KEYRING_SERVICE = "lazy-app"
+KEYRING_USERNAME = "openai-api-key"
+
+load_dotenv() 
 
 from api_client import APIClient
 from audio_engine import AudioEngine
@@ -18,91 +25,89 @@ from ui.meeting_mode import MeetingMode
 from ui.work_tracker_mode import WorkTrackerMode
 from ui.settings_dialog import SettingsDialog
 
-class WaveformVisualizer(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setMinimumHeight(120)
-        self.data = np.zeros(50)
-        
-    def set_data(self, indata):
-        # Calculate RMS for visualization
-        rms = np.sqrt(np.mean(indata**2))
-        self.data = np.roll(self.data, -1)
-        self.data[-1] = rms
-        self.update()
+def set_native_grey_theme(hwnd):
+    # Grey color: 0x00A0A0A0 (BGR format)
+    grey_color = 0x00A0A0A0 
+    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(ctypes.c_int(grey_color)), 4)
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        w = self.width()
-        h = self.height()
-        
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 0)) # Transparent
-        
-        bar_count = len(self.data)
-        bar_width = w / bar_count
-        
-        for i in range(bar_count):
-            val = self.data[i]
-            bar_h = val * h * 12 # Slightly taller
-            if bar_h > h: bar_h = h
-            if bar_h < 6: bar_h = 6 # Minimum height for presence
-            
-            x = i * bar_width
-            y = (h - bar_h) / 2
-            
-            gradient = QLinearGradient(0, y, 0, y + bar_h)
-            gradient.setColorAt(0, QColor("#60a5fa")) # Brighter blue
-            gradient.setColorAt(0.5, QColor("#8b5cf6")) # Violet middle
-            gradient.setColorAt(1, QColor("#ec4899")) # Pink bottom
-            
-            painter.setBrush(gradient)
-            painter.setPen(Qt.PenStyle.NoPen)
-            # Thinner bars with more gap for that pro look
-            painter.drawRoundedRect(int(x + 2), int(y), int(bar_width - 4), int(bar_h), 5, 5)
+class Bridge(QObject):
+    def __init__(self, stack):
+        super().__init__()
+        self.stack = stack
 
-class MainWindow(QMainWindow):
+    @pyqtSlot(int)
+    def navigate(self, index):
+        self.stack.setCurrentIndex(index)
+
+class LazyApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        
         self.setWindowTitle("LAZY - Audio Transcription & Work Tracker")
         self.setMinimumSize(1100, 750)
+        
+        # Set Window Icon (Absolute Path)
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        self.icon_path = os.path.join(app_dir, "assets", "app_icon.ico")
+        if os.path.exists(self.icon_path):
+            self.setWindowIcon(QIcon(self.icon_path))
         
         self.settings_path = os.path.join(os.path.expanduser("~"), ".lazy_settings.json")
         self.settings = self.load_settings()
         
         self.audio_engine = AudioEngine()
-        self.audio_engine.on_data = self.handle_audio_data
         
         self.db_manager = DatabaseManager()
         self.api_client = self.init_api_client()
         
         self.init_ui()
         self.load_styles()
+        
+        # Apply Grey Theme after showing or in init if HWND is ready
+        QTimer.singleShot(0, self.apply_theme)
 
-    def handle_audio_data(self, data):
-        self.visualizer.set_data(data)
+    def apply_theme(self):
+        if sys.platform == 'win32':
+            set_native_grey_theme(int(self.winId()))
 
     def load_settings(self):
-        # Default priority: JSON Settings > .env > Hardcoded defaults
         defaults = {
-            'openaiApiKey': os.getenv('OPENAI_API_KEY', ''),
+            'openaiApiKey': '',
             'openaiModel': os.getenv('OPENAI_MODEL', 'gpt-4o'),
             'openaiMaxTokens': int(os.getenv('OPENAI_MAX_TOKENS', 4000))
         }
-        
         if os.path.exists(self.settings_path):
             with open(self.settings_path, 'r') as f:
                 saved = json.load(f)
-                # Overwrite defaults with saved settings if they exist
-                defaults.update({k: v for k, v in saved.items() if v})
-                
+                defaults.update({k: v for k, v in saved.items() if v and k != 'openaiApiKey'})
+
+        # Load API key from secure storage (keyring) or env var as fallback
+        stored_key = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
+        if stored_key:
+            defaults['openaiApiKey'] = stored_key
+        elif os.getenv('OPENAI_API_KEY'):
+            defaults['openaiApiKey'] = os.getenv('OPENAI_API_KEY')
+
         return defaults
 
     def save_settings(self, new_settings):
         self.settings = new_settings
+
+        # Store API key securely in OS keyring
+        api_key = new_settings.get('openaiApiKey', '')
+        if api_key:
+            keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME, api_key)
+        else:
+            try:
+                keyring.delete_password(KEYRING_SERVICE, KEYRING_USERNAME)
+            except keyring.errors.PasswordDeleteError:
+                pass
+
+        # Save non-sensitive settings to JSON file
+        safe_settings = {k: v for k, v in new_settings.items() if k != 'openaiApiKey'}
         with open(self.settings_path, 'w') as f:
-            json.dump(new_settings, f)
+            json.dump(safe_settings, f)
+
         self.api_client = self.init_api_client()
 
     def init_api_client(self):
@@ -130,137 +135,132 @@ class MainWindow(QMainWindow):
         self.header = QFrame()
         self.header.setFixedHeight(80)
         header_layout = QHBoxLayout(self.header)
-        header_layout.setContentsMargins(30, 0, 30, 0)
-        
-        self.logo_btn = QPushButton("LAZY")
-        self.logo_btn.setObjectName("TitleLabel")
-        self.logo_btn.setStyleSheet("font-size: 24px; font-weight: 800; color: white; background: transparent; border: none;")
-        self.logo_btn.setFlat(True)
-        self.logo_btn.clicked.connect(lambda: self.switch_mode(0))
-        header_layout.addWidget(self.logo_btn)
+        header_layout.setContentsMargins(30, 10, 30, 10)
         
         header_layout.addStretch()
         
-        self.settings_btn = QPushButton("Settings")
+        # Logo Icon Button (PNG Version, 80x40)
+        self.logo_btn = QPushButton()
+        self.logo_btn.setObjectName("LogoIconButton")
+        self.logo_btn.setFixedSize(90, 50)
+        self.logo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.logo_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        png_logo = os.path.join(app_dir, "assets", "icon.png")
+        if os.path.exists(png_logo):
+            self.logo_btn.setIcon(QIcon(png_logo))
+            self.logo_btn.setIconSize(QSize(80, 40))
+        elif os.path.exists(self.icon_path):
+            self.logo_btn.setIcon(QIcon(self.icon_path))
+            self.logo_btn.setIconSize(QSize(80, 40))
+            
+        header_layout.addWidget(self.logo_btn)
+        header_layout.addStretch()
+        
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setObjectName("SettingsBtn")
+        self.settings_btn.setFixedSize(45, 45)
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 20px;
+                color: #e4e4e7;
+                background-color: transparent;
+                border: 2px solid #27272a;
+                border-radius: 6px;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                border: 2px solid #3b82f6;
+                background-color: rgba(59, 130, 246, 0.1);
+            }
+            QPushButton:pressed {
+                background-color: rgba(59, 130, 246, 0.2);
+            }
+        """)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.open_settings)
         header_layout.addWidget(self.settings_btn)
-        
         self.main_layout.addWidget(self.header)
 
-        # Visualizer Bar
-        self.vis_container = QFrame()
-        vis_layout = QVBoxLayout(self.vis_container)
-        vis_layout.setContentsMargins(30, 0, 30, 10)
-        self.visualizer = WaveformVisualizer()
-        vis_layout.addWidget(self.visualizer)
-        self.main_layout.addWidget(self.vis_container)
-        
-        # Stacked Widget
+        # Content
         self.stack = QStackedWidget()
-        
-        # Landing
         self.stack.addWidget(self.create_landing_page())
-        
-        # Meeting Mode
         self.meeting_mode = MeetingMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast)
         self.stack.addWidget(self.meeting_mode)
-        
-        # Work Tracker Mode
         self.tracker_mode = WorkTrackerMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast)
         self.stack.addWidget(self.tracker_mode)
-        
         self.main_layout.addWidget(self.stack)
         
-        # Status Bar
+        # Footer
         self.footer = QFrame()
         self.footer.setFixedHeight(40)
-        self.footer.setStyleSheet("border-top: 1px solid #334155; background: #0f172a;")
+        self.footer.setObjectName("Footer")
         footer_layout = QHBoxLayout(self.footer)
-        footer_layout.setContentsMargins(20, 0, 20, 0)
-        
         self.status_icon = QFrame()
         self.status_icon.setFixedSize(8, 8)
         self.status_icon.setStyleSheet("background: #10b981; border-radius: 4px;")
         footer_layout.addWidget(self.status_icon)
-        
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
         footer_layout.addWidget(self.status_label)
-        
         footer_layout.addStretch()
-        v_label = QLabel("v1.0.0")
-        v_label.setStyleSheet("color: #475569; font-size: 11px;")
+        v_label = QLabel("v1.2.3")
         footer_layout.addWidget(v_label)
-        
         self.main_layout.addWidget(self.footer)
         
-        # Toast Overlay
+        # Toast
         self.toast_label = QLabel(self.central_widget)
         self.toast_label.hide()
         self.toast_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.toast_label.setFixedHeight(40)
-        self.toast_label.setStyleSheet("background: #1e293b; color: white; border-radius: 20px; padding: 0 20px; border: 1px solid #3b82f6;")
+        
+        self.stack.currentChanged.connect(self.on_page_changed)
+        self.on_page_changed(0)
 
     def create_landing_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        view = QWebEngineView()
+        settings = view.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.ShowScrollBars, False)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
         
-        title = QLabel("Choose Your Workspace")
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: white; margin-bottom: 40px;")
-        layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
+        view.setStyleSheet("background-color: black;")
+        view.page().setBackgroundColor(QColor("black"))
         
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(40)
+        self.bridge = Bridge(self.stack)
+        self.channel = QWebChannel()
+        self.channel.registerObject("backend", self.bridge)
+        view.page().setWebChannel(self.channel)
         
-        m_btn = QPushButton("Meeting Transcription")
-        m_btn.setFixedSize(300, 180)
-        m_btn.setObjectName("PrimaryButton")
-        m_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        m_btn.clicked.connect(lambda: self.switch_mode(1))
-        
-        t_btn = QPushButton("Work Tracker")
-        t_btn.setFixedSize(300, 180)
-        t_btn.setObjectName("PrimaryButton")
-        t_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        t_btn.clicked.connect(lambda: self.switch_mode(2))
-        
-        btn_layout.addWidget(m_btn)
-        btn_layout.addWidget(t_btn)
-        
-        layout.addLayout(btn_layout)
-        return page
-
-    def switch_mode(self, index):
-        # Smooth Fade-in Transition
-        self.eff = QGraphicsOpacityEffect(self.stack)
-        self.stack.setGraphicsEffect(self.eff)
-        self.anim = QPropertyAnimation(self.eff, b"opacity")
-        self.anim.setDuration(300)
-        self.anim.setStartValue(0)
-        self.anim.setEndValue(1)
-        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        
-        self.stack.setCurrentIndex(index)
-        self.anim.start()
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        html_path = os.path.join(app_dir, "assets", "landing.html")
+        view.setUrl(QUrl.fromLocalFile(html_path))
+        return view
 
     def open_settings(self):
         dialog = SettingsDialog(self.settings, self.save_settings, self)
         dialog.exec()
 
+    def on_page_changed(self, index):
+        is_landing = (index == 0)
+        if is_landing:
+            # Delay hiding to let the Spline viewer render
+            QTimer.singleShot(50, self._hide_header_footer)
+        else:
+            self.header.setVisible(True)
+            self.footer.setVisible(True)
+
+    def _hide_header_footer(self):
+        self.header.setVisible(False)
+        self.footer.setVisible(False)
+
     def show_toast(self, message, msg_type="info"):
         self.toast_label.setText(message)
-        color = "#3b82f6" # info (blue)
-        if msg_type == "success": color = "#10b981"
-        if msg_type == "error": color = "#ef4444"
-        if msg_type == "warning": color = "#f59e0b"
-        
-        self.toast_label.setStyleSheet(f"background: #1e1b4b; color: #f1f5f9; border-radius: 20px; padding: 0 25px; border: 1px solid {color}; font-weight: 600; font-size: 13px;")
+        colors = {"success": "#10b981", "error": "#ef4444", "warning": "#f59e0b", "info": "#3b82f6"}
+        color = colors.get(msg_type, "#3b82f6")
+        self.toast_label.setStyleSheet(f"background: #1e293b; color: white; border-radius: 20px; padding: 0 20px; border: 2px solid {color}; font-weight: bold;")
         self.toast_label.adjustSize()
-        self.toast_label.move((self.width() - self.toast_label.width()) // 2, self.height() - 120)
+        self.toast_label.move((self.width() - self.toast_label.width()) // 2, self.height() - 100)
         self.toast_label.show()
-        
         QTimer.singleShot(3000, self.toast_label.hide)
 
     def load_styles(self):
@@ -269,7 +269,21 @@ class MainWindow(QMainWindow):
                 self.setStyleSheet(f.read())
 
 if __name__ == "__main__":
+    # Stabilization flags (RE-ENABLED TO FIX DISTORTION)
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu-compositing --disable-gpu-rasterization"
+
+    if sys.platform == 'win32':
+        myappid = 'com.lazy.app.v1.2'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
     app = QApplication(sys.argv)
-    window = MainWindow()
+    
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(app_dir, "assets", "app_icon.ico")
+    if os.path.exists(icon_path):
+        icon = QIcon(icon_path)
+        app.setWindowIcon(icon)
+
+    window = LazyApp()
     window.show()
     sys.exit(app.exec())

@@ -16,25 +16,16 @@ class SettingsDialog(QDialog):
         
         form = QFormLayout()
         
-        self.claude_key = QLineEdit(self.settings.get('claudeApiKey', ''))
-        self.claude_key.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("Claude API Key:", self.claude_key)
+        self.openai_key = QLineEdit(self.settings.get('openaiApiKey', ''))
+        self.openai_key.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("OpenAI API Key:", self.openai_key)
         
-        self.whisper_provider = QComboBox()
-        self.whisper_provider.addItems(["groq", "openai"])
-        self.whisper_provider.setCurrentText(self.settings.get('whisperProvider', 'groq'))
-        form.addRow("Whisper Provider:", self.whisper_provider)
-        
-        self.whisper_key = QLineEdit(self.settings.get('whisperApiKey', ''))
-        self.whisper_key.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("Whisper API Key:", self.whisper_key)
-        
-        self.claude_model = QLineEdit(self.settings.get('claudeModel', 'claude-3-5-sonnet-20240620'))
-        form.addRow("Claude Model:", self.claude_model)
+        self.openai_model = QLineEdit(self.settings.get('openaiModel', 'gpt-4o'))
+        form.addRow("OpenAI Model:", self.openai_model)
         
         self.max_tokens = QSpinBox()
         self.max_tokens.setRange(100, 100000)
-        self.max_tokens.setValue(self.settings.get('claudeMaxTokens', 4000))
+        self.max_tokens.setValue(self.settings.get('openaiMaxTokens', 4000))
         form.addRow("Max Tokens:", self.max_tokens)
         
         layout.addLayout(form)
@@ -53,11 +44,9 @@ class SettingsDialog(QDialog):
 
     def handle_save(self):
         new_settings = {
-            'claudeApiKey': self.claude_key.text(),
-            'whisperProvider': self.whisper_provider.currentText(),
-            'whisperApiKey': self.whisper_key.text(),
-            'claudeModel': self.claude_model.text(),
-            'claudeMaxTokens': self.max_tokens.value()
+            'openaiApiKey': self.openai_key.text(),
+            'openaiModel': self.openai_model.text(),
+            'openaiMaxTokens': self.max_tokens.value()
         }
         self.on_save(new_settings)
         self.accept()

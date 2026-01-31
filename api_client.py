@@ -4,27 +4,22 @@ import re
 from typing import Dict, Optional
 
 class APIClient:
-    def __init__(self, claude_api_key: str, whisper_api_key: str, whisper_provider: str = 'groq', 
-                 claude_model: str = 'claude-3-5-sonnet-20240620', claude_max_tokens: int = 4000):
-        self.claude_api_key = claude_api_key
-        self.whisper_api_key = whisper_api_key
-        self.whisper_provider = whisper_provider
-        self.claude_model = claude_model
-        self.claude_max_tokens = claude_max_tokens
+    def __init__(self, openai_api_key: str, 
+                 openai_model: str = 'gpt-4o', openai_max_tokens: int = 4000):
+        self.openai_api_key = openai_api_key
+        self.openai_model = openai_model
+        self.openai_max_tokens = openai_max_tokens
 
     def transcribe_audio(self, audio_file_path: str) -> str:
-        if self.whisper_provider == 'openai':
-            url = 'https://api.openai.com/v1/audio/transcriptions'
-        else:
-            url = 'https://api.groq.com/openai/v1/audio/transcriptions'
-
+        url = 'https://api.openai.com/v1/audio/transcriptions'
+        
         headers = {
-            'Authorization': f'Bearer {self.whisper_api_key}'
+            'Authorization': f'Bearer {self.openai_api_key}'
         }
 
         with open(audio_file_path, 'rb') as f:
             files = {
-                'file': ('audio.webm', f, 'audio/webm'),
+                'file': ('audio.wav', f, 'audio/wav'),
                 'model': (None, 'whisper-1')
             }
             response = requests.post(url, headers=headers, files=files)
@@ -54,7 +49,7 @@ Action Items:
 
 Transcript:
 {transcript}"""
-        return self._call_claude(prompt)
+        return self._call_gpt(prompt)
 
     def generate_story_from_overview(self, overview: str) -> Dict[str, str]:
         prompt = f"""You are helping create a Jira story. Convert this dictated overview into:
@@ -72,7 +67,7 @@ SUMMARY
 DESCRIPTION
 [Generated description text]"""
         
-        response = self._call_claude(prompt)
+        response = self._call_gpt(prompt)
         
         summary_match = re.search(r'SUMMARY\s*\n(.*?)(?=\n\nDESCRIPTION|\n*$)', response, re.DOTALL)
         description_match = re.search(r'DESCRIPTION\s*\n(.*?)$', response, re.DOTALL)
@@ -97,26 +92,26 @@ Raw dictation:
 {comment}
 
 Return only the polished comment text, no prefix or formatting."""
-        return self._call_claude(prompt)
+        return self._call_gpt(prompt)
 
-    def _call_claude(self, prompt: str) -> str:
-        url = 'https://api.anthropic.com/v1/messages'
+    def _call_gpt(self, prompt: str) -> str:
+        url = 'https://api.openai.com/v1/chat/completions'
         headers = {
             'Content-Type': 'application/json',
-            'x-api-key': self.claude_api_key,
-            'anthropic-version': '2023-06-01'
+            'Authorization': f'Bearer {self.openai_api_key}'
         }
         data = {
-            'model': self.claude_model,
-            'max_tokens': self.claude_max_tokens,
+            'model': self.openai_model,
+            'max_tokens': self.openai_max_tokens,
             'messages': [
                 {'role': 'user', 'content': prompt}
-            ]
+            ],
+            'temperature': 0.7
         }
         
         response = requests.post(url, headers=headers, json=data)
         
         if not response.ok:
-            raise Exception(f"Claude API failed: {response.text}")
+            raise Exception(f"OpenAI API failed: {response.text}")
             
-        return response.json()['content'][0]['text']
+        return response.json()['choices'][0]['message']['content']

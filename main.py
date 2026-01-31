@@ -7,9 +7,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QFrame, QSizePolicy, QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer, QPropertyAnimation, QRect
 from PyQt6.QtGui import QColor, QPainter, QLinearGradient, QFont
+from dotenv import load_dotenv
+
+load_dotenv() # Load environment variables from .env
 
 from api_client import APIClient
 from audio_engine import AudioEngine
+from database_manager import DatabaseManager
 from ui.meeting_mode import MeetingMode
 from ui.work_tracker_mode import WorkTrackerMode
 from ui.settings_dialog import SettingsDialog
@@ -68,6 +72,7 @@ class MainWindow(QMainWindow):
         self.audio_engine = AudioEngine()
         self.audio_engine.on_data = self.handle_audio_data
         
+        self.db_manager = DatabaseManager()
         self.api_client = self.init_api_client()
         
         self.init_ui()
@@ -77,16 +82,20 @@ class MainWindow(QMainWindow):
         self.visualizer.set_data(data)
 
     def load_settings(self):
+        # Default priority: JSON Settings > .env > Hardcoded defaults
+        defaults = {
+            'openaiApiKey': os.getenv('OPENAI_API_KEY', ''),
+            'openaiModel': os.getenv('OPENAI_MODEL', 'gpt-4o'),
+            'openaiMaxTokens': int(os.getenv('OPENAI_MAX_TOKENS', 4000))
+        }
+        
         if os.path.exists(self.settings_path):
             with open(self.settings_path, 'r') as f:
-                return json.load(f)
-        return {
-            'claudeApiKey': '',
-            'whisperApiKey': '',
-            'whisperProvider': 'groq',
-            'claudeModel': 'claude-3-5-sonnet-20240620',
-            'claudeMaxTokens': 4000
-        }
+                saved = json.load(f)
+                # Overwrite defaults with saved settings if they exist
+                defaults.update({k: v for k, v in saved.items() if v})
+                
+        return defaults
 
     def save_settings(self, new_settings):
         self.settings = new_settings
@@ -95,13 +104,11 @@ class MainWindow(QMainWindow):
         self.api_client = self.init_api_client()
 
     def init_api_client(self):
-        if self.settings.get('claudeApiKey') and self.settings.get('whisperApiKey'):
+        if self.settings.get('openaiApiKey'):
             return APIClient(
-                claude_api_key=self.settings['claudeApiKey'],
-                whisper_api_key=self.settings['whisperApiKey'],
-                whisper_provider=self.settings['whisperProvider'],
-                claude_model=self.settings['claudeModel'],
-                claude_max_tokens=self.settings['claudeMaxTokens']
+                openai_api_key=self.settings['openaiApiKey'],
+                openai_model=self.settings['openaiModel'],
+                openai_max_tokens=self.settings['openaiMaxTokens']
             )
         return None
 
@@ -152,11 +159,11 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.create_landing_page())
         
         # Meeting Mode
-        self.meeting_mode = MeetingMode(self.audio_engine, self.get_api_client, self.show_toast)
+        self.meeting_mode = MeetingMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast)
         self.stack.addWidget(self.meeting_mode)
         
         # Work Tracker Mode
-        self.tracker_mode = WorkTrackerMode(self.audio_engine, self.get_api_client, self.show_toast)
+        self.tracker_mode = WorkTrackerMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast)
         self.stack.addWidget(self.tracker_mode)
         
         self.main_layout.addWidget(self.stack)

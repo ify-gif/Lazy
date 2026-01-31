@@ -1,12 +1,13 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QTextEdit, QFrame, QComboBox, QScrollArea)
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QDialog
 from api_client import APIClient
+from ui.utils import Worker
 
 class MeetingMode(QWidget):
-    def __init__(self, audio_engine, get_api_client_cb, on_toast, parent=None):
+    def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, parent=None):
         super().__init__(parent)
         self.audio_engine = audio_engine
+        self.db_manager = db_manager
         self.get_api_client = get_api_client_cb
         self.on_toast = on_toast
         
@@ -32,6 +33,7 @@ class MeetingMode(QWidget):
         toolbar.addStretch()
         
         self.history_btn = QPushButton("History")
+        self.history_btn.clicked.connect(self.show_history)
         toolbar.addWidget(self.history_btn)
         layout.addLayout(toolbar)
         
@@ -56,6 +58,7 @@ class MeetingMode(QWidget):
         controls.addStretch()
         
         self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self.save_transcript)
         self.save_btn.hide()
         controls.addWidget(self.save_btn)
         
@@ -139,30 +142,88 @@ class MeetingMode(QWidget):
             self.reset_record_btn()
             return
             
-        try:
-            self.on_toast("Transcribing audio...", "info")
-            # In a real app, this should be in a separate thread to not block UI
-            text = api_client.transcribe_audio(path)
-            self.transcript_edit.setPlainText(text)
-            self.on_toast("Transcription complete", "success")
-            self.save_btn.show()
-        except Exception as e:
-            self.on_toast(str(e), "error")
-        finally:
-            self.reset_record_btn()
+        self.on_toast("Transcribing audio...", "info")
+        self.worker = Worker(api_client.transcribe_audio, path)
+        self.worker.finished.connect(self.on_transcription_success)
+        self.worker.error.connect(self.on_worker_error)
+        self.worker.start()
+
+    def on_transcription_success(self, text):
+        self.transcript_edit.setPlainText(text)
+        self.on_toast("Transcription complete", "success")
+        self.save_btn.show()
+        self.reset_record_btn()
 
     def generate_summary(self):
         transcript = self.transcript_edit.toPlainText()
         if not transcript: return
         
         api_client = self.get_api_client()
+        if not api_client:
+            self.on_toast("API keys not configured", "error")
+            return
+            
+        self.on_toast("Generating summary...", "info")
+        self.worker = Worker(api_client.generate_meeting_summary, transcript)
+        self.worker.finished.connect(self.on_summary_success)
+        self.worker.error.connect(self.on_worker_error)
+        self.worker.start()
+
+    def on_summary_success(self, summary):
+        self.summary_view.setPlainText(summary)
+        self.on_toast("Summary generated", "success")
+
+    def on_worker_error(self, message):
+        self.on_toast(message, "error")
+        self.reset_record_btn()
+
+    def show_history(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Meeting History")
+        dialog.setFixedSize(500, 400)
+        layout = QVBoxLayout(dialog)
+        
+        list_widget = QListWidget()
+        items = self.db_manager.get_transcripts()
+        for item in items:
+            list_item = QListWidgetItem(f"{item['title']} ({item['recording_date'][:10]})")
+            list_item.setData(Qt.ItemDataRole.UserRole, item)
+            list_widget.addItem(list_item)
+            
+        layout.addWidget(list_widget)
+        
+        load_btn = QPushButton("Load Selected")
+        def load():
+            curr = list_widget.currentItem()
+            if curr:
+                data = curr.data(Qt.ItemDataRole.UserRole)
+                self.title_input.setPlainText(data['title'])
+                self.transcript_edit.setPlainText(data['content'])
+                self.summary_view.setPlainText(data['summary'])
+                dialog.accept()
+        
+        load_btn.clicked.connect(load)
+        layout.addWidget(load_btn)
+        dialog.exec()
+
+    def save_transcript(self):
+        title = self.title_input.toPlainText() or "Untitled Meeting"
+        content = self.transcript_edit.toPlainText()
+        summary = self.summary_view.toPlainText()
+        
+        if not content: return
+        
         try:
-            self.on_toast("Generating summary...", "info")
-            summary = api_client.generate_meeting_summary(transcript)
-            self.summary_view.setPlainText(summary)
-            self.on_toast("Summary generated", "success")
+            data = {
+                'title': title,
+                'content': content,
+                'summary': summary,
+                'duration': self.seconds_elapsed
+            }
+            self.db_manager.save_transcript(data)
+            self.on_toast("Transcript saved locally", "success")
         except Exception as e:
-            self.on_toast(str(e), "error")
+            self.on_toast(f"Failed to save: {str(e)}", "error")
 
     def reset_record_btn(self):
         self.record_btn.setText("Start Recording")

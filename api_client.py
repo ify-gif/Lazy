@@ -17,10 +17,20 @@ class APIClient:
             'Authorization': f'Bearer {self.openai_api_key}'
         }
 
+        # Whisper Technical Context Prompt to stop hallucinations
+        whisper_prompt = (
+            "This is a technical Business Analyst session for the LAZY app. "
+            "The audio contains software requirements, Jira stories, and technical jargon "
+            "like API, GUI, Frontend, Backend, SQL, and Acceptance Criteria. "
+            "Please transcribe in professional English, ignoring stutters or filler words."
+        )
+
         with open(audio_file_path, 'rb') as f:
             files = {
                 'file': ('audio.wav', f, 'audio/wav'),
-                'model': (None, 'whisper-1')
+                'model': (None, 'whisper-1'),
+                'language': (None, 'en'),
+                'prompt': (None, whisper_prompt) # Added strategic technical context
             }
             response = requests.post(url, headers=headers, files=files)
 
@@ -30,32 +40,34 @@ class APIClient:
         return response.json().get('text', '')
 
     def generate_meeting_summary(self, transcript: str) -> str:
-        prompt = f"""Analyze this meeting transcript and create a structured summary.
+        prompt = f"""Role: You are a Senior Business Analyst. Task: Convert this meeting transcript into a technical-executive brief.
 
-Extract:
-1. Participants (names mentioned in the conversation)
-2. Key Decisions (important conclusions or agreements)
-3. Action Items (tasks assigned with owners if mentioned)
+1. Executive Summary: A 2-sentence overview of the business value and key outcomes. 
+2. Technical Specifications:
+   - Functional: Logic, user flows, and feature requirements discussed.
+   - Non-Functional: Performance, security, or data constraints. 
+3. Strategic Decisions: List all "Hard Decisions" made vs. items deferred. 
+4. Action Registry: A table with Task, Owner, Priority, and Logic Gaps (flagging missing technical info). 
+5. Key Insights & Sentiment: Highlight any "under-the-radar" observations. (e.g., "The team expressed hesitation about the Q3 budget," or "Customer X specifically praised the new UI.")
+6. Participant List: Mention all active contributors.
+7. Parked Items (The Sandbox): List topics that were brought up but tabled for future discussion.
+8. Unresolved Logic Gaps: List technical questions or business rules that remain undefined and require follow-up.
 
-Format your response as:
-Participants: [list]
-
-Key Decisions:
-- [decision 1]
-- [decision 2]
-
-Action Items:
-- [ ] [action with owner if known]
+Constraint: Do not use corporate jargon or filler. Be direct, objective, and keep the total length under 500 words.
 
 Transcript:
 {transcript}"""
         return self._call_gpt(prompt)
 
     def generate_story_from_overview(self, overview: str) -> Dict[str, str]:
-        prompt = f"""You are helping create a Jira story. Convert this dictated overview into a JSON object with exactly two fields:
+        prompt = f"""Role: You are a Technical Project Manager. Task: Convert this dictated thought into a structured Jira User Story JSON object.
 
-- "summary": A concise title (50-100 characters, action-oriented, no period at end)
-- "description": A clear 2-4 sentence description with context and purpose
+Fields required in the JSON:
+- "summary": Action-oriented title (50-100 chars, no period at end).
+- "description": A professional technical overview including:
+  1. User Story: (As a... I want... So that...)
+  2. Technical Context: System dependencies or data requirements.
+  3. Acceptance Criteria: A bulleted list of "Given/When/Then" (Gherkin) validation points.
 
 Overview:
 {overview}
@@ -80,15 +92,14 @@ Return ONLY valid JSON, no markdown or other formatting."""
             }
 
     def polish_comment(self, comment: str) -> str:
-        prompt = f"""You are helping add a comment to a Jira story. Polish this dictated comment into a professional, well-structured paragraph.
+        prompt = f"""Role: Professional Editor / Senior BA. Task: Clean this recording into a precise Jira comment.
 
 Requirements:
-- Clear and concise
-- Professional tone
-- 2-4 sentences
-- Expand abbreviations if needed
-- Fix grammar/phrasing
-- Maintain original meaning and technical details
+- Remove all fillers ("umms", "ahhs", "so yeah").
+- Executive-Technical Balance: Maintain professional tone while preserving technical jargon and specific data points.
+- Formatting: Use Markdown bolding for key terms (e.g., **API**, **Database**, **Deadline**).
+- Length: 2-8 sentences.
+- Clarity: Expand abbreviations if they are ambiguous, but keep standard tech shorthand.
 
 Raw dictation:
 {comment}
@@ -108,7 +119,7 @@ Return only the polished comment text, no prefix or formatting."""
             'messages': [
                 {'role': 'user', 'content': prompt}
             ],
-            'temperature': 0.7
+            'temperature': 0.3
         }
 
         if json_mode:

@@ -1,9 +1,9 @@
 import sys
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextEdit, QFrame, QScrollArea,
-                             QListWidget, QListWidgetItem, QDialog, QLineEdit, QApplication)
-from ui.utils import Worker, LoadingDialog, WaveformVisualizer, set_native_grey_theme
+                             QListWidget, QListWidgetItem, QDialog, QLineEdit, QApplication, QMessageBox)
+from ui.utils import Worker, LoadingDialog, WaveformVisualizer, set_native_grey_theme, StyledConfirmDialog
 from ui.export_utils import export_meeting
 
 class MeetingMode(QWidget):
@@ -118,9 +118,32 @@ class MeetingMode(QWidget):
         
         transcript_header = QHBoxLayout()
         transcript_header.addWidget(QLabel("Transcript"))
+        
+        transcript_header.addStretch()
+        
+        # New Session / Clear Link
+        self.clear_btn = QPushButton("Clear/New Session")
+        self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #10b981;
+                border: none;
+                font-size: 10px;
+                text-decoration: underline;
+                font-weight: normal;
+            }
+            QPushButton:hover {
+                color: #34d399;
+            }
+        """)
+        self.clear_btn.clicked.connect(self.clear_session)
+        transcript_header.addWidget(self.clear_btn)
+        
+        transcript_header.addStretch()
+        
         self.transcript_stats = QLabel("0 words • 0 chars")
         self.transcript_stats.setStyleSheet("color: #a1a1aa; font-size: 11px; font-weight: bold;")
-        transcript_header.addStretch()
         transcript_header.addWidget(self.transcript_stats)
         transcript_layout.addLayout(transcript_header)
 
@@ -396,16 +419,57 @@ class MeetingMode(QWidget):
             records_layout.addWidget(list_widget)
             layout.addWidget(records_frame)
 
+            def delete_meeting(item_data):
+                confirm = StyledConfirmDialog("Delete Meeting", 
+                                            f"Are you sure you want to delete '{item_data['title']}'?",
+                                            dialog)
+                
+                if confirm.exec() == QDialog.DialogCode.Accepted:
+                    self.db_manager.delete_item('transcripts', item_data['id'])
+                    self.on_toast("Meeting deleted", "success")
+                    nonlocal items
+                    items = self.db_manager.get_transcripts()
+                    populate_list(search_input.text())
+
             def populate_list(search_text=""):
                 list_widget.clear()
                 search_lower = search_text.lower()
                 for item in items:
-                    title = item['title'].lower()
-                    date = item['recording_date'][:10]
-                    if search_lower in title or search_lower in date:
-                        list_item = QListWidgetItem(f"{item['title']} ({date})")
+                    title_text = item['title']
+                    date_text = item['recording_date'][:10]
+                    if search_lower in title_text.lower() or search_lower in date_text.lower():
+                        list_item = QListWidgetItem(list_widget)
+                        list_item.setSizeHint(QSize(0, 50))
                         list_item.setData(Qt.ItemDataRole.UserRole, item)
-                        list_widget.addItem(list_item)
+                        
+                        # Row Widget
+                        row_widget = QWidget()
+                        row_layout = QHBoxLayout(row_widget)
+                        row_layout.setContentsMargins(15, 0, 15, 0)
+                        
+                        label = QLabel(f"{title_text} ({date_text})")
+                        label.setStyleSheet("color: #000000; font-size: 13px;")
+                        row_layout.addWidget(label)
+                        
+                        row_layout.addStretch()
+                        
+                        del_btn = QPushButton("Delete")
+                        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                        del_btn.setStyleSheet("""
+                            QPushButton {
+                                color: #ef4444;
+                                background-color: transparent;
+                                border: none;
+                                font-size: 11px;
+                                text-decoration: underline;
+                                font-weight: normal;
+                                padding: 0;
+                            }
+                        """)
+                        del_btn.clicked.connect(lambda checked, i=item: delete_meeting(i))
+                        row_layout.addWidget(del_btn)
+                        
+                        list_widget.setItemWidget(list_item, row_widget)
 
             search_input.textChanged.connect(lambda text: populate_list(text))
             populate_list()
@@ -534,3 +598,27 @@ class MeetingMode(QWidget):
             self.on_toast("✓ Summary copied to clipboard", "success")
         else:
             self.on_toast("No summary to copy", "warning")
+
+    def clear_session(self):
+        # Safety Valve: check for unsaved content
+        has_content = (self.title_input.text().strip() or 
+                       self.transcript_edit.toPlainText().strip() or 
+                       self.summary_view.toPlainText().strip())
+        
+        if has_content:
+            confirm = StyledConfirmDialog("Start New Session?", 
+                                        "Unsaved progress will be cleared. Proceed?",
+                                        self)
+            if confirm.exec() != QDialog.DialogCode.Accepted:
+                return
+
+        # Reset UI
+        self.title_input.clear()
+        self.transcript_edit.clear()
+        self.summary_view.clear()
+        self.seconds_elapsed = 0
+        self.timer_label.setText("00:00:00")
+        self.timer_label.hide()
+        self.save_btn.hide()
+        
+        self.on_toast("Meeting workbench cleared", "info")

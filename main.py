@@ -24,7 +24,7 @@ from database_manager import DatabaseManager
 from ui.meeting_mode import MeetingMode
 from ui.work_tracker_mode import WorkTrackerMode
 from ui.settings_dialog import SettingsDialog
-from ui.utils import set_native_grey_theme
+from ui.utils import set_native_grey_theme, PulsatingIcon, CheatSheetPopover
 
 
 class Bridge(QObject):
@@ -133,7 +133,14 @@ class LazyApp(QMainWindow):
         self.header.setFixedHeight(80)
         header_layout = QHBoxLayout(self.header)
         header_layout.setContentsMargins(30, 10, 30, 10)
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter) # Force vertical centering
         
+        # FAR LEFT: Cheat Sheet Info Icon (Mirrors Settings Gear)
+        self.info_btn = PulsatingIcon("ⓘ", self.header)
+        self.info_btn.clicked.connect(self.toggle_cheat_sheet)
+        self.info_btn.hide() # Only visible in Work Tracker mode
+        header_layout.addWidget(self.info_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
         header_layout.addStretch()
         
         # Logo Icon Button (PNG Version, 80x40)
@@ -152,33 +159,32 @@ class LazyApp(QMainWindow):
             self.logo_btn.setIcon(QIcon(self.icon_path))
             self.logo_btn.setIconSize(QSize(80, 40))
             
-        header_layout.addWidget(self.logo_btn)
+        header_layout.addWidget(self.logo_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         header_layout.addStretch()
         
         self.settings_btn = QPushButton("⚙")
         self.settings_btn.setObjectName("SettingsBtn")
-        self.settings_btn.setFixedSize(45, 45)
+        self.settings_btn.setFixedSize(32, 32)
         self.settings_btn.setStyleSheet("""
             QPushButton {
-                font-size: 20px;
+                font-size: 16px;
                 color: #e4e4e7;
                 background-color: transparent;
-                border: 2px solid #27272a;
-                border-radius: 6px;
-                padding: 2px;
+                border: none;
+                padding: 0px;
             }
             QPushButton:hover {
-                border: 2px solid #3b82f6;
-                background-color: rgba(59, 130, 246, 0.1);
-            }
-            QPushButton:pressed {
-                background-color: rgba(59, 130, 246, 0.2);
+                color: #3b82f6;
             }
         """)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.open_settings)
-        header_layout.addWidget(self.settings_btn)
+        header_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         self.main_layout.addWidget(self.header)
+
+        # Cheat Sheet Popover (Stationary Overlay)
+        self.cheat_sheet = CheatSheetPopover(self.central_widget)
+        self.cheat_sheet.hide()
 
         # Content
         self.stack = QStackedWidget()
@@ -239,12 +245,29 @@ class LazyApp(QMainWindow):
 
     def on_page_changed(self, index):
         is_landing = (index == 0)
+        is_work_tracker = (index == 2)
+        
         if is_landing:
             # Delay hiding to let the Spline viewer render
             QTimer.singleShot(50, self._hide_header_footer)
+            self.info_btn.hide()
         else:
             self.header.setVisible(True)
             self.footer.setVisible(True)
+            # Toggle far-left info icon visibility based on mode
+            self.info_btn.setVisible(is_work_tracker)
+        
+        if hasattr(self, 'cheat_sheet'):
+            self.cheat_sheet.hide()
+
+    def toggle_cheat_sheet(self):
+        if self.cheat_sheet.isVisible():
+            self.cheat_sheet.hide()
+        else:
+            # Position stationary popover on the left, below the far-left icon
+            self.cheat_sheet.move(20, self.header.height() + 10)
+            self.cheat_sheet.show()
+            self.cheat_sheet.raise_()
 
     def _hide_header_footer(self):
         self.header.setVisible(False)

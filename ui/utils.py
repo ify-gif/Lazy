@@ -1,8 +1,11 @@
-from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QFrame, QWidget, QHBoxLayout
-from PyQt6.QtGui import QColor, QPainter, QPen
+from PyQt6.QtCore import (QThread, pyqtSignal, Qt, QTimer, QPropertyAnimation, 
+                         QEasingCurve, QPoint, pyqtProperty, QSequentialAnimationGroup)
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QFrame, QWidget, 
+                             QHBoxLayout, QPushButton, QScrollArea, QGraphicsOpacityEffect)
+from PyQt6.QtGui import QColor, QPainter, QPen, QFont
 import traceback
 import numpy as np
+import sys
 import ctypes
 
 def set_native_grey_theme(hwnd):
@@ -84,6 +87,69 @@ class LoadingDialog(QDialog):
         super().closeEvent(event)
 
 
+class StyledConfirmDialog(QDialog):
+    """Premium-styled confirmation dialog with native frame and custom buttons"""
+
+    def __init__(self, title, message, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setFixedSize(400, 180)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #000000;
+                border: 1px solid #ffffff;
+            }
+            QLabel {
+                color: #ffffff;
+                font-size: 14px;
+                padding-bottom: 10px;
+            }
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #ffffff;
+                border-radius: 6px;
+                color: #ffffff;
+                padding: 8px 30px;
+                font-size: 13px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        """)
+        
+        if ctypes and sys.platform == 'win32':
+            set_native_grey_theme(int(self.winId()))
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(20)
+
+        # Message
+        self.label = QLabel(message)
+        self.label.setWordWrap(True)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.label)
+
+        # Buttons
+        btns_layout = QHBoxLayout()
+        btns_layout.setSpacing(15)
+        btns_layout.addStretch()
+
+        self.yes_btn = QPushButton("Yes")
+        self.yes_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.yes_btn.clicked.connect(self.accept)
+        btns_layout.addWidget(self.yes_btn)
+
+        self.no_btn = QPushButton("No")
+        self.no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.no_btn.clicked.connect(self.reject)
+        btns_layout.addWidget(self.no_btn)
+        
+        btns_layout.addStretch()
+        layout.addLayout(btns_layout)
+
+
 class WaveformVisualizer(QWidget):
     """Real-time audio waveform visualizer showing input levels"""
 
@@ -136,3 +202,176 @@ class WaveformVisualizer(QWidget):
             painter.fillRect(x, y, bar_width - bar_spacing, bar_height, color)
             painter.setPen(QPen(color, 1))
             painter.drawRect(x, y, bar_width - bar_spacing, bar_height)
+
+
+class PulsatingIcon(QPushButton):
+    """An icon button that pulsates/breathes with a soft glow"""
+    def __init__(self, text="ⓘ", parent=None):
+        super().__init__("", parent)
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setObjectName("PulsatingInfoIcon")
+        
+        # Internal layout to hold the label
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # The actual icon text inside a label (this will breathe)
+        self.icon_label = QLabel(text)
+        self.icon_label.setStyleSheet("color: #10b981; font-size: 18px; font-weight: bold; background: transparent;")
+        self.icon_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        layout.addWidget(self.icon_label)
+
+        # Style for the button background and border (Empty/Simple)
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                border-radius: 0px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: transparent;
+            }
+            QPushButton:pressed {
+                background-color: transparent;
+            }
+        """)
+
+        # Opacity effect ONLY for the icon label
+        self.opacity_effect = QGraphicsOpacityEffect(self.icon_label)
+        self.icon_label.setGraphicsEffect(self.opacity_effect)
+        self.opacity_effect.setOpacity(1.0)
+
+        # Smooth In/Out Breathing Animation Loop
+        self.anim_group = QSequentialAnimationGroup(self)
+        
+        # Inhale (Fade in)
+        self.inhale = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.inhale.setDuration(1500)
+        self.inhale.setStartValue(0.3)
+        self.inhale.setEndValue(1.0)
+        self.inhale.setEasingCurve(QEasingCurve.Type.InOutSine)
+        
+        # Exhale (Fade out)
+        self.exhale = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.exhale.setDuration(1500)
+        self.exhale.setStartValue(1.0)
+        self.exhale.setEndValue(0.3)
+        self.exhale.setEasingCurve(QEasingCurve.Type.InOutSine)
+        
+        self.anim_group.addAnimation(self.inhale)
+        self.anim_group.addAnimation(self.exhale)
+        self.anim_group.setLoopCount(-1) # Infinite loop
+        self.anim_group.start()
+
+
+class CheatSheetPopover(QFrame):
+    """A stationary sticky information bubble for cheatsheet content"""
+    closed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(380, 500)
+        self.setObjectName("CheatSheetPopover")
+        self.setStyleSheet("""
+            QFrame#CheatSheetPopover {
+                background-color: #09090b;
+                border: 2px solid #27272a;
+                border-radius: 12px;
+            }
+            QLabel {
+                color: #e4e4e7;
+                font-size: 13px;
+                line-height: 1.6;
+            }
+            QLabel#Title {
+                font-size: 16px;
+                font-weight: bold;
+                color: #10b981;
+                margin-top: 5px;
+                margin-bottom: 5px;
+            }
+            QLabel#SectionHeader {
+                font-weight: bold;
+                color: #3b82f6;
+                margin-top: 15px;
+            }
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Header with Close Button
+        header = QFrame()
+        header.setFixedHeight(40)
+        header.setStyleSheet("background: transparent;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(20, 0, 20, 0) # Symmetric margins
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        
+        title_lbl = QLabel("LAZY Cheat Sheet")
+        title_lbl.setObjectName("Title")
+        header_layout.addWidget(title_lbl, alignment=Qt.AlignmentFlag.AlignVCenter)
+        
+        header_layout.addStretch()
+        
+        close_btn = QPushButton("X") # Standard X instead of unicode
+        close_btn.setFixedSize(28, 28)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #ff4444;
+                border: none;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                color: #ff8888;
+            }
+        """)
+        close_btn.clicked.connect(self.hide)
+        close_btn.clicked.connect(self.closed.emit)
+        header_layout.addWidget(close_btn)
+        layout.addWidget(header)
+
+        # Content Area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(20, 10, 20, 20)
+        content_layout.setSpacing(10)
+
+        text_content = [
+            ("The LAZY Work Tracker Cheat Sheet", "To get perfect Jira stories every time, try to use these \"trigger\" words while you speak."),
+            ("1. The Core Story", "Formula: **\"As a [User], I want to [Action], so that [Benefit].\"**\n\nExample: \"As a Product Manager, I want to export the summary as a PDF, so that I can share it with stakeholders who don't have the app.\""),
+            ("2. The Acceptance Criteria (Given/When/Then)", "Triggers: Use words like **\"Specifically,\"** **\"Scenario,\"** or **\"Validation.\"**\n\n**Given (The Context)**: \"Given I am on the History page...\"\n**When (The Action)**: \"When I click the export button...\"\n**Then (The Result)**: \"Then a PDF should download with the current date in the filename.\""),
+            ("3. Technical Constraints", "Triggers: Use words like **\"Must,\"** **\"Only,\"** or **\"Requirement.\"**\n\nExample: \"The API must return a 404 if the story ID doesn't exist,\" or \"This only works for users with Admin permissions.\"")
+        ]
+
+        for title, body in text_content:
+            if title:
+                h = QLabel(title)
+                h.setObjectName("SectionHeader")
+                h.setWordWrap(True)
+                content_layout.addWidget(h)
+            
+            b = QLabel(body)
+            b.setWordWrap(True)
+            content_layout.addWidget(b)
+
+        content_layout.addStretch()
+        scroll.setWidget(content_widget)
+        layout.addWidget(scroll)
+
+        # Initially hidden
+        self.hide()

@@ -10,6 +10,7 @@ class AudioEngine:
     def __init__(self, samplerate: int = 44100):
         self.samplerate = samplerate
         self.recording = False
+        self.paused = False
         self.audio_data = []
         self.stream: Optional[sd.InputStream] = None
         self._temp_files: list[str] = []
@@ -25,7 +26,7 @@ class AudioEngine:
         def callback(indata, frames, time, status):
             if status:
                 print(status)
-            if self.recording:
+            if self.recording and not self.paused:
                 self.audio_data.append(indata.copy())
                 if self.on_data:
                     self.on_data(indata)
@@ -37,6 +38,16 @@ class AudioEngine:
             callback=callback
         )
         self.stream.start()
+
+    def pause_recording(self):
+        """Pause data accumulation without stopping the stream."""
+        if self.recording:
+            self.paused = True
+
+    def resume_recording(self):
+        """Resume data accumulation."""
+        if self.recording:
+            self.paused = False
 
     def stop_recording(self) -> str:
         self.recording = False
@@ -75,4 +86,7 @@ class AudioEngine:
             self.cleanup_temp_file(path)
 
     def is_recording(self) -> bool:
-        return self.recording
+        return self.recording and not self.paused
+
+    def is_paused(self) -> bool:
+        return self.paused

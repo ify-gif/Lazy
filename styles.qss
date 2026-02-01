@@ -3,7 +3,7 @@
     outline: none;
 }
 
-#CentralWidget {
+#CentralWidget, QDialog {
     background-color: #000000; /* Pure Black Background */
     border: 1px solid #ffffff; /* Sharp White Frame */
 }
@@ -35,25 +35,34 @@ QFrame {
     border: none;
 }
 
-#SummaryContainer {
+#SummaryContainer, #TranscriptContainer {
     background-color: #09090b; /* Zinc-950 */
     border-radius: 12px;
-    border: 1px solid #27272a; /* Zinc-800 */
+    border: 1px solid #d0d0d0; /* Light grey border */
 }
 
 /* Inputs */
 QTextEdit, QLineEdit, QComboBox, QSpinBox {
-    background-color: #000000;
-    border: 1px solid #27272a; /* Zinc-800 */
+    background-color: #e8e8e8;
+    border: 1px solid #cccccc;
     border-radius: 8px;
-    padding: 12px;
-    color: #ffffff;
-    selection-background-color: #ffffff;
-    selection-color: #000000;
+    padding: 8px 12px;
+    color: #000000;
+    selection-background-color: #3b82f6;
+    selection-color: #ffffff;
 }
 
-QTextEdit:focus, QLineEdit:focus {
-    border: 1px solid #71717a; /* Zinc-500 */
+QTextEdit:focus, QLineEdit:focus, QComboBox:focus {
+    border: 1px solid #3b82f6;
+}
+
+/* Fix QComboBox transparency */
+QComboBox QAbstractItemView {
+    background-color: #18181b;
+    border: 1px solid #27272a;
+    selection-background-color: #3b82f6;
+    color: #e4e4e7;
+    outline: none;
 }
 
 /* Buttons */
@@ -79,7 +88,7 @@ QPushButton:pressed {
 /* Primary/Action Buttons - Gradient Style from Hero */
 #PrimaryButton {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255,255,255,0.1), stop:1 rgba(255,255,255,0.05));
-    border: 1px solid rgba(255,255,255,0.2);
+    border: 1px solid #d0d0d0; /* Unified light grey border */
     color: #ffffff;
 }
 
@@ -101,7 +110,7 @@ QPushButton:pressed {
 
 #RecordHoldButton {
     background-color: #000000;
-    border: 1px solid #ffffff;
+    border: 2px solid #ffffff; /* 2px White border to stand out */
     color: #ffffff;
     border-radius: 25px; /* Pill shape */
 }

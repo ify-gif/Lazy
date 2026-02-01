@@ -6,3 +6,4 @@ sounddevice>=0.4.6
 soundfile>=0.12.1
 numpy>=2.1.0
 keyring>=25.0.0
+reportlab>=4.0.4

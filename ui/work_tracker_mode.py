@@ -1,15 +1,17 @@
+import sys
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextEdit, QFrame, QScrollArea, QLineEdit, QListWidget, QListWidgetItem, QDialog)
 from PyQt6.QtCore import Qt, pyqtSignal
-from ui.utils import Worker, LoadingDialog
+from ui.utils import Worker, LoadingDialog, set_native_grey_theme
 
 class WorkTrackerMode(QWidget):
-    def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, parent=None):
+    def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, set_status_cb, parent=None):
         super().__init__(parent)
         self.audio_engine = audio_engine
         self.db_manager = db_manager
         self.get_api_client = get_api_client_cb
         self.on_toast = on_toast
+        self.set_status = set_status_cb
         
         self.story = {
             'title': '',
@@ -112,6 +114,7 @@ class WorkTrackerMode(QWidget):
         self.audio_engine.start_recording()
         self.record_hold_btn.setText("🎤 Recording...")
         self.on_toast("Recording overview...", "info")
+        self.set_status("Recording Overview...", "#ef4444")
 
     def stop_recording_ov(self):
         self.record_hold_btn.setText("🎤 Transcribing...")
@@ -119,11 +122,14 @@ class WorkTrackerMode(QWidget):
         api_client = self.get_api_client()
         if api_client and path:
             try:
+                self.set_status("Transcribing...", "#3b82f6")
                 text = api_client.transcribe_audio(path)
                 self.overview_input.setPlainText(text)
                 self.on_toast("Overview transcribed", "success")
+                self.set_status("Status", "#10b981")
             except Exception as e:
                 self.on_toast(str(e), "error")
+                self.set_status(f"Error: {str(e)}", "#ef4444")
             finally:
                 self.audio_engine.cleanup_temp_file(path)
         self.record_hold_btn.setText("🎤 Hold to Record")
@@ -141,6 +147,7 @@ class WorkTrackerMode(QWidget):
 
         self._loading_dialog = LoadingDialog("✨ Generating Jira story...", self)
         self._loading_dialog.show()
+        self.set_status("Generating Story...", "#3b82f6")
 
         self.worker = Worker(api_client.generate_story_from_overview, overview)
         self.worker.finished.connect(self.on_story_success)
@@ -157,6 +164,7 @@ class WorkTrackerMode(QWidget):
         self.overview_container.hide()
         self.story_container.show()
         self.on_toast("✓ Story generated!", "success")
+        self.set_status("Ready", "#10b981")
 
     def add_comment(self):
         text = self.comment_input.toPlainText()
@@ -171,6 +179,7 @@ class WorkTrackerMode(QWidget):
 
         self._loading_dialog = LoadingDialog("✏️ Polishing comment...", self)
         self._loading_dialog.show()
+        self.set_status("Polishing Comment...", "#3b82f6")
 
         self.worker = Worker(api_client.polish_comment, text)
         self.worker.finished.connect(self.on_comment_success)
@@ -184,6 +193,7 @@ class WorkTrackerMode(QWidget):
         self.update_comments_list()
         self.comment_input.clear()
         self.on_toast("✓ Comment added", "success")
+        self.set_status("Ready", "#10b981")
 
     def on_worker_error(self, message):
         if hasattr(self, '_loading_dialog'):
@@ -191,17 +201,30 @@ class WorkTrackerMode(QWidget):
         # Provide helpful error messages
         if "401" in message or "Invalid" in message or "unauthorized" in message.lower():
             self.on_toast("Invalid API key. Check Settings and try again.", "error")
+            self.set_status("Error: Invalid API Key", "#ef4444")
         elif "timeout" in message.lower() or "connection" in message.lower():
             self.on_toast("Network error. Check your connection and try again.", "error")
+            self.set_status("Error: Network Failure", "#ef4444")
         else:
             self.on_toast(f"Error: {message}", "error")
+            self.set_status(f"Error: {message}", "#ef4444")
 
     def show_history(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("Work Story History")
-        dialog.setFixedSize(500, 400)
-        dialog.setStyleSheet("background-color: #000000;")
+        dialog.setFixedSize(600, 500)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #000000;
+                border: 1px solid #ffffff;
+            }
+        """)
+        if sys.platform == 'win32':
+            set_native_grey_theme(int(dialog.winId()))
+            
         layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
 
         items = self.db_manager.get_work_stories()
 
@@ -213,33 +236,97 @@ class WorkTrackerMode(QWidget):
             layout.addWidget(empty_label)
         else:
             # Search bar
-            search_layout = QHBoxLayout()
             search_input = QLineEdit()
-            search_input.setPlaceholderText("🔍 Search stories...")
-            search_input.setStyleSheet("background-color: #0a0a0a; color: #e4e4e7; border: 1px solid #27272a; padding: 5px; border-radius: 4px;")
-            search_layout.addWidget(search_input)
-            layout.addLayout(search_layout)
+            search_input.setPlaceholderText("Search stories...")
+            search_input.setFixedHeight(40)
+            search_input.setStyleSheet("""
+                QLineEdit {
+                    background-color: #e8e8e8;
+                    color: #000000;
+                    border: 1px solid #d0d0d0;
+                    padding: 0 10px;
+                    border-radius: 4px;
+                }
+                QLineEdit:focus {
+                    border: 1px solid #3b82f6;
+                }
+            """)
+            layout.addWidget(search_input)
+
+            # Records Container (mimicking TranscriptContainer in main app)
+            records_frame = QFrame()
+            records_frame.setObjectName("TranscriptContainer")
+            records_frame.setStyleSheet("""
+                #TranscriptContainer {
+                    background-color: #09090b;
+                    border: 1px solid #d0d0d0;
+                    border-radius: 12px;
+                }
+            """)
+            records_layout = QVBoxLayout(records_frame)
+            records_layout.setContentsMargins(12, 10, 12, 10)
+            records_layout.setSpacing(8)
+            
+            records_header = QLabel("Saved Stories")
+            records_header.setStyleSheet("color: #e4e4e7; font-size: 11px; font-weight: normal; letter-spacing: 1px;")
+            records_layout.addWidget(records_header)
 
             list_widget = QListWidget()
-            list_widget.setStyleSheet("background-color: #0a0a0a; color: #e4e4e7; border: 1px solid #27272a;")
+            list_widget.setStyleSheet("""
+                QListWidget {
+                    background-color: #e8e8e8;
+                    color: #000000;
+                    border: 1px solid #cccccc;
+                    border-radius: 8px;
+                    outline: none;
+                }
+                QListWidget::item {
+                    padding: 6px 10px;
+                    border-bottom: 1px solid #d1d1d1;
+                    color: #000000;
+                }
+                QListWidget::item:last {
+                    border-bottom: none;
+                }
+                QListWidget::item:hover {
+                    background-color: #c0c0c0;
+                }
+                QListWidget::item:selected {
+                    background-color: #ffffff;
+                    color: #000000;
+                    border: 1px solid #000000;
+                }
+            """)
+            records_layout.addWidget(list_widget)
+            layout.addWidget(records_frame)
 
             def populate_list(search_text=""):
                 list_widget.clear()
                 search_lower = search_text.lower()
                 for item in items:
-                    title = item['title'].lower()
-                    date = item['created_at'][:10]
+                    title = item.get('title', '').lower()
+                    date = item.get('created_at', '')[:10]
                     if search_lower in title or search_lower in date:
-                        list_item = QListWidgetItem(f"✓ {item['title']} ({date})")
+                        list_item = QListWidgetItem(f"{item.get('title', 'Untitled')} ({date})")
                         list_item.setData(Qt.ItemDataRole.UserRole, item)
                         list_widget.addItem(list_item)
 
             search_input.textChanged.connect(lambda text: populate_list(text))
             populate_list()
-            layout.addWidget(list_widget)
 
-            load_btn = QPushButton("📂 Load Selected")
-            load_btn.setObjectName("PrimaryButton")
+            open_btn = QPushButton("Open Story")
+            open_btn.setFixedHeight(45)
+            open_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: 1px solid #ffffff;
+                    border-radius: 6px;
+                    color: #ffffff;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 0.1);
+                }
+            """)
 
             def load():
                 curr = list_widget.currentItem()
@@ -253,8 +340,8 @@ class WorkTrackerMode(QWidget):
                     self.story_container.show()
                     dialog.accept()
 
-            load_btn.clicked.connect(load)
-            layout.addWidget(load_btn)
+            open_btn.clicked.connect(load)
+            layout.addWidget(open_btn)
 
         dialog.exec()
 

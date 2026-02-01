@@ -24,11 +24,8 @@ from database_manager import DatabaseManager
 from ui.meeting_mode import MeetingMode
 from ui.work_tracker_mode import WorkTrackerMode
 from ui.settings_dialog import SettingsDialog
+from ui.utils import set_native_grey_theme
 
-def set_native_grey_theme(hwnd):
-    # Grey color: 0x00A0A0A0 (BGR format)
-    grey_color = 0x00A0A0A0 
-    ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(ctypes.c_int(grey_color)), 4)
 
 class Bridge(QObject):
     def __init__(self, stack):
@@ -186,9 +183,9 @@ class LazyApp(QMainWindow):
         # Content
         self.stack = QStackedWidget()
         self.stack.addWidget(self.create_landing_page())
-        self.meeting_mode = MeetingMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast)
+        self.meeting_mode = MeetingMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast, self.set_status)
         self.stack.addWidget(self.meeting_mode)
-        self.tracker_mode = WorkTrackerMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast)
+        self.tracker_mode = WorkTrackerMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast, self.set_status)
         self.stack.addWidget(self.tracker_mode)
         self.main_layout.addWidget(self.stack)
         
@@ -201,7 +198,7 @@ class LazyApp(QMainWindow):
         self.status_icon.setFixedSize(8, 8)
         self.status_icon.setStyleSheet("background: #10b981; border-radius: 4px;")
         footer_layout.addWidget(self.status_icon)
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel("Status")
         footer_layout.addWidget(self.status_label)
         footer_layout.addStretch()
         v_label = QLabel("v1.2.3")
@@ -237,7 +234,7 @@ class LazyApp(QMainWindow):
         return view
 
     def open_settings(self):
-        dialog = SettingsDialog(self.settings, self.save_settings, self)
+        dialog = SettingsDialog(self.settings, self.save_settings, self.audio_engine, self)
         dialog.exec()
 
     def on_page_changed(self, index):
@@ -252,6 +249,11 @@ class LazyApp(QMainWindow):
     def _hide_header_footer(self):
         self.header.setVisible(False)
         self.footer.setVisible(False)
+
+    def set_status(self, message, color="#10b981"):
+        """Update the footer status bar"""
+        self.status_label.setText(message)
+        self.status_icon.setStyleSheet(f"background: {color}; border-radius: 4px;")
 
     def show_toast(self, message, msg_type="info"):
         self.toast_label.setText(message)

@@ -314,6 +314,10 @@ class WorkTrackerMode(QWidget):
             search_input.textChanged.connect(lambda text: populate_list(text))
             populate_list()
 
+            # Button container
+            btn_container = QHBoxLayout()
+            btn_container.setSpacing(10)
+
             open_btn = QPushButton("Open Story")
             open_btn.setFixedHeight(45)
             open_btn.setStyleSheet("""
@@ -325,6 +329,20 @@ class WorkTrackerMode(QWidget):
                 }
                 QPushButton:hover {
                     background-color: rgba(255, 255, 255, 0.1);
+                }
+            """)
+
+            delete_btn = QPushButton("Delete Story")
+            delete_btn.setFixedHeight(45)
+            delete_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: 1px solid #ef4444;
+                    border-radius: 6px;
+                    color: #ef4444;
+                }
+                QPushButton:hover {
+                    background-color: rgba(239, 68, 68, 0.1);
                 }
             """)
 
@@ -340,8 +358,23 @@ class WorkTrackerMode(QWidget):
                     self.story_container.show()
                     dialog.accept()
 
+            def delete():
+                curr = list_widget.currentItem()
+                if curr:
+                    data = curr.data(Qt.ItemDataRole.UserRole)
+                    try:
+                        self.db_manager.delete_item('work_stories', data['id'])
+                        self.on_toast("Story deleted", "success")
+                        populate_list(search_input.text())
+                    except Exception as e:
+                        self.on_toast(f"Failed to delete: {str(e)}", "error")
+
             open_btn.clicked.connect(load)
-            layout.addWidget(open_btn)
+            delete_btn.clicked.connect(delete)
+
+            btn_container.addWidget(open_btn)
+            btn_container.addWidget(delete_btn)
+            layout.addLayout(btn_container)
 
         dialog.exec()
 

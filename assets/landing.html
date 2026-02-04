@@ -7,13 +7,108 @@
     <title>LaZy Landing</title>
     <script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.59/build/spline-viewer.js"></script>
     <style>
+        :root {
+            --card: #ffffff;
+            --ring: #a5b4fc;
+            --input: #737373;
+            --muted: #f0f0f0;
+            --accent: #f59e0b;
+            --border: #000000;
+            --radius: 1rem;
+            --chart-1: #4f46e5;
+            --chart-2: #14b8a6;
+            --chart-3: #f59e0b;
+            --chart-4: #ec4899;
+            --chart-5: #22c55e;
+            --popover: #ffffff;
+            --primary: #4f46e5;
+            --sidebar: #f7f9f3;
+            --spacing: 0.25rem;
+            --font-mono: Space Mono, monospace;
+            --font-sans: DM Sans, sans-serif;
+            --secondary: #14b8a6;
+            --background: #f7f9f3;
+            --font-serif: DM Sans, sans-serif;
+            --foreground: #000000;
+            --destructive: #ef4444;
+            --shadow-blur: 0px;
+            --shadow-color: #1a1a1a;
+            --sidebar-ring: #a5b4fc;
+            --shadow-spread: 0px;
+            --letter-spacing: normal;
+            --shadow-opacity: 0.05;
+            --sidebar-accent: #f59e0b;
+            --sidebar-border: #000000;
+            --card-foreground: #000000;
+            --shadow-offset-x: 0px;
+            --shadow-offset-y: 0px;
+            --sidebar-primary: #4f46e5;
+            --muted-foreground: #333333;
+            --accent-foreground: #000000;
+            --popover-foreground: #000000;
+            --primary-foreground: #ffffff;
+            --sidebar-foreground: #000000;
+            --secondary-foreground: #ffffff;
+            --destructive-foreground: #ffffff;
+            --sidebar-accent-foreground: #000000;
+            --sidebar-primary-foreground: #ffffff;
+        }
+
+        .dark {
+            --card: #1a212b;
+            --ring: #818cf8;
+            --input: #ffffff;
+            --muted: #333333;
+            --accent: #fcd34d;
+            --border: #545454;
+            --radius: 1rem;
+            --chart-1: #818cf8;
+            --chart-2: #2dd4bf;
+            --chart-3: #fcd34d;
+            --chart-4: #f472b6;
+            --chart-5: #4ade80;
+            --popover: #1a212b;
+            --primary: #818cf8;
+            --sidebar: #000000;
+            --spacing: 0.25rem;
+            --font-mono: Space Mono, monospace;
+            --font-sans: DM Sans, sans-serif;
+            --secondary: #2dd4bf;
+            --background: #000000;
+            --font-serif: DM Sans, sans-serif;
+            --foreground: #ffffff;
+            --destructive: #f87171;
+            --shadow-blur: 0px;
+            --shadow-color: #1a1a1a;
+            --sidebar-ring: #818cf8;
+            --shadow-spread: 0px;
+            --letter-spacing: normal;
+            --shadow-opacity: 0.05;
+            --sidebar-accent: #fcd34d;
+            --sidebar-border: #ffffff;
+            --card-foreground: #ffffff;
+            --shadow-offset-x: 0px;
+            --shadow-offset-y: 0px;
+            --sidebar-primary: #818cf8;
+            --muted-foreground: #cccccc;
+            --accent-foreground: #000000;
+            --popover-foreground: #ffffff;
+            --primary-foreground: #000000;
+            --sidebar-foreground: #ffffff;
+            --secondary-foreground: #000000;
+            --destructive-foreground: #000000;
+            --sidebar-accent-foreground: #000000;
+            --sidebar-primary-foreground: #000000;
+        }
+
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #000;
+            background-color: var(--background);
+            color: var(--foreground);
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
             opacity: 0;
-            transition: opacity 0.3s ease-in-out;
+            transition: opacity 0.3s ease-in-out, background-color 0.3s ease, color 0.3s ease;
         }
 
         body.loaded {
@@ -24,7 +119,7 @@
             width: 100vw;
             height: 100vh;
             display: block;
-            background-color: black;
+            background-color: var(--background);
         }
 
         #overlay {
@@ -47,14 +142,14 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: radial-gradient(circle at center, transparent 30%, black 100%);
+            background: radial-gradient(circle at center, transparent 30%, var(--background) 100%);
             pointer-events: none;
             z-index: 5;
         }
 
         .content {
             text-align: center;
-            color: white;
+            color: var(--foreground);
             pointer-events: auto;
             margin-top: 100px;
             width: 100%;
@@ -65,21 +160,44 @@
             font-weight: 200;
             margin: 0 0 1rem 0;
             letter-spacing: -0.02em;
-            text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            text-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            color: var(--foreground);
         }
 
         p {
             font-size: 1.2rem;
             font-weight: 300;
-            color: rgba(255, 255, 255, 0.7);
+            color: var(--muted-foreground);
             max-width: 700px;
             margin: 0 auto 2.5rem auto;
-            text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
+
+        /* LOGO HANDLING - Invert in light mode if needed for white logos */
+        /* Assuming 'icon.png' is white/light on transparent */
+        img.logo-img {
+            max-height: 40vh;
+            width: auto;
+            max-width: 90%;
+            margin-bottom: 2rem;
+            filter: drop-shadow(0 0 20px rgba(0, 0, 0, 0.5));
+            transition: filter 0.3s ease;
+        }
+
+        /* In Light Mode (body has NO .dark class) */
+        body:not(.dark) img.logo-img {
+            /* Invert white logo to black */
+            filter: invert(1) drop-shadow(0 0 5px rgba(0, 0, 0, 0.2));
+        }
+
+        /* If the user meant the logo has a BLACK BACKGROUND, mix-blend-mode: screen hides it in dark mode.
+           But in light mode, screen on white bg = white.
+           We'll assume transparency. If it has a black bg, invert makes it a white bg, which matches the page? 
+           Let's rely on standard transparency. */
 
         b {
             font-weight: 700;
-            color: #fff;
+            color: var(--foreground);
         }
 
         .btn-container {
@@ -114,19 +232,21 @@
             border-radius: 24px;
             font-size: 1rem;
             font-weight: 500;
-            transition: transform 0.2s ease;
-            background: #000;
-            border: none;
+            transition: transform 0.2s ease, background 0.2s ease;
+            background: var(--card);
+            border: 1px solid var(--border);
             cursor: pointer;
             isolation: isolate;
             text-decoration: none;
             --light-width: 80px;
-            --light-color: #ffffff;
+            --light-color: var(--primary-foreground);
             --duration: 4s;
+            color: var(--card-foreground);
         }
 
         .star-btn:hover {
             transform: scale(1.02);
+            background: var(--muted);
         }
 
         .star-btn .light-trail {
@@ -134,7 +254,7 @@
             inset: 0;
             width: var(--light-width);
             height: var(--light-width);
-            background: radial-gradient(circle at center, var(--light-color), transparent 70%);
+            background: radial-gradient(circle at center, var(--primary), transparent 70%);
             offset-path: var(--path);
             animation: star-btn-move var(--duration) linear infinite;
             z-index: 1;
@@ -152,7 +272,7 @@
             z-index: 2;
             border-radius: inherit;
             overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.4);
+            border: 2px solid var(--border);
             pointer-events: none;
             box-sizing: border-box;
         }
@@ -166,13 +286,14 @@
             transform: translate(-50%, -50%);
         }
 
+        .star-btn path {
+            fill: var(--card-foreground);
+        }
+
         .star-btn span {
             position: relative;
             z-index: 10;
-            background: linear-gradient(180deg, #ffffff 0%, #a3a3a3 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
+            color: var(--card-foreground);
             font-family: inherit;
         }
     </style>
@@ -187,12 +308,12 @@
         <div
             style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; width: 100%; z-index: 20; padding: 20px; box-sizing: border-box;">
 
-            <img src="icon.png" alt="LAZY Logo"
-                style="max-height: 40vh; width: auto; max-width: 90%; margin-bottom: 2rem; filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));">
+            <img src="icon.png" alt="LAZY Logo" class="logo-img">
 
             <div class="content" id="main-content">
-                <h1>An enterprise-grade solution for <b>Herch</b></h1>
-                <p>With logo inspiration from <b>Sid</b> and executive sponsorship by Big Daddy <b>Ryan</b></p>
+                <h1>Logic Augmentation & Zero-gap Yield</h1>
+                <p>A unified intelligence suite for capturing complex requirements and tracking the project lifecycle.
+                </p>
 
                 <div class="btn-container">
                     <button class="star-btn" onclick="navigate(1)">
@@ -234,6 +355,14 @@
         function navigate(index) {
             if (backend) { backend.navigate(index); }
             else { console.log("Navigating to:", index); }
+        }
+
+        function setTheme(theme) {
+            if (theme === 'dark') {
+                document.body.classList.add('dark');
+            } else {
+                document.body.classList.remove('dark');
+            }
         }
 
         function updatePath() {

@@ -3,11 +3,10 @@ import numpy as np
 import soundfile as sf
 import tempfile
 import os
-import threading
 from typing import Optional, Callable
 
 class AudioEngine:
-    def __init__(self, samplerate: int = 44100):
+    def __init__(self, samplerate: int = 16000):
         self.samplerate = samplerate
         self.recording = False
         self.paused = False
@@ -35,7 +34,8 @@ class AudioEngine:
             samplerate=self.samplerate,
             channels=1,
             device=device_id,
-            callback=callback
+            callback=callback,
+            dtype='float32'
         )
         self.stream.start()
 
@@ -62,11 +62,12 @@ class AudioEngine:
         # Concatenate all chunks
         full_audio = np.concatenate(self.audio_data, axis=0)
         
-        # Save to a temporary webm-like file (Whisper likes .wav or .mp3, let's use .wav for safety)
+        # Save to a temporary wav file
+        # Use subtype='PCM_16' to ensure 16-bit depth (reduces file size)
         fd, path = tempfile.mkstemp(suffix='.wav')
         os.close(fd)
 
-        sf.write(path, full_audio, self.samplerate)
+        sf.write(path, full_audio, self.samplerate, subtype='PCM_16')
         self._temp_files.append(path)
         return path
 

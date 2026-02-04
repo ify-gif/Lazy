@@ -2,9 +2,11 @@ import sys
 from datetime import datetime
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QPushButton, QTextEdit, QFrame, QScrollArea, QLineEdit, 
-                             QListWidget, QListWidgetItem, QDialog, QMessageBox, QFileDialog)
+                             QPushButton, QTextEdit, QFrame, QLineEdit,
+                             QListWidget, QListWidgetItem, QDialog)
 from ui.utils import Worker, LoadingDialog, WaveformVisualizer, set_native_grey_theme, StyledConfirmDialog
+from ui.export_utils import export_story_file
+from logger_config import logger
 
 # ============ Comment Widgets ============
 class CommentItemWidget(QWidget):
@@ -108,11 +110,12 @@ class CommentViewDialog(QDialog):
 
 
 class WorkTrackerMode(QWidget):
-    def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, set_status_cb, parent=None):
+    def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, set_status_cb, get_settings_cb=None, parent=None):
         super().__init__(parent)
         self.audio_engine = audio_engine
         self.db_manager = db_manager
         self.get_api_client = get_api_client_cb
+        self.get_settings = get_settings_cb or (lambda: {})
         self.on_toast = on_toast
         self.set_status = set_status_cb
         
@@ -131,7 +134,8 @@ class WorkTrackerMode(QWidget):
         self.recording_timer = QTimer()
         self.recording_timer.timeout.connect(self.update_timer)
         self.stories = [] # Cache for filtering
-        
+        self._worker_running = False  # Thread safety flag
+
         self.init_ui()
 
     def init_ui(self):
@@ -201,8 +205,6 @@ class WorkTrackerMode(QWidget):
         """)
         self.hist_list.itemClicked.connect(self.load_selected_story)
         hist_layout.addWidget(self.hist_list)
-        
-        self.main_layout.addWidget(self.history_frame)
 
         self.main_layout.addWidget(self.history_frame)
 
@@ -335,7 +337,12 @@ class WorkTrackerMode(QWidget):
         controls_bar.addWidget(self.stop_btn)
         
         controls_bar.addStretch()
-        
+
+        self.waveform = WaveformVisualizer()
+        self.waveform.setFixedWidth(120)
+        self.waveform.hide()
+        controls_bar.addWidget(self.waveform)
+
         self.timer_label = QLabel("00:00")
         self.timer_label.setStyleSheet("color: #71717a; font-family: 'Consolas', monospace; font-size: 12px; font-weight: bold;")
         self.timer_label.hide()
@@ -368,10 +375,7 @@ class WorkTrackerMode(QWidget):
         """)
         self.generate_btn.clicked.connect(self.generate_story)
         trans_layout.addWidget(self.generate_btn)
-        
-        self.generate_btn.clicked.connect(self.generate_story)
-        trans_layout.addWidget(self.generate_btn)
-        
+
         # Add Comment Button (New)
         self.add_comment_btn = QPushButton("Add Comment")
         self.add_comment_btn.setFixedHeight(40)
@@ -399,7 +403,7 @@ class WorkTrackerMode(QWidget):
         self.add_comment_btn.clicked.connect(self.enter_comment_mode)
         trans_layout.addWidget(self.add_comment_btn)
         
-        center_column.addWidget(self.transcript_frame, 3) # weight 3
+        center_column.addWidget(self.transcript_frame, 2) # weight 2
         
         # 2. AI Summary Container
         self.summary_frame = QFrame()
@@ -458,7 +462,7 @@ class WorkTrackerMode(QWidget):
         """)
         summ_layout.addWidget(self.ai_summary_output)
         
-        center_column.addWidget(self.summary_frame, 2) # weight 2
+        center_column.addWidget(self.summary_frame, 3) # weight 3 (more space for summary)
 
         # --- FOOTER BUTTONS ---
         footer_layout = QHBoxLayout()
@@ -570,11 +574,14 @@ class WorkTrackerMode(QWidget):
         self.pause_btn.setText("Pause")
         self.stop_btn.show()
         
-        self.audio_engine.start_recording()
+        device_id = self.get_settings().get('audioInputDevice') or None
+        self.audio_engine.start_recording(device_id)
+        self.audio_engine.on_data = self.waveform.update_level
         self.recording_state = "recording"
         self.seconds_elapsed = 0
         self.timer_label.setText("00:00")
         self.timer_label.show()
+        self.waveform.show()
         self.recording_timer.start(1000)
         
         msg = "Recording Comment..." if self.work_mode == "comment" else "Recording Overview..."
@@ -608,29 +615,59 @@ class WorkTrackerMode(QWidget):
         self.recording_timer.stop()
         self.recording_state = "idle"
         self.timer_label.hide()
-        
+        self.waveform.hide()
+        self.audio_engine.on_data = None
+
         self.start_btn.show()
         self.start_btn.setText("Start")
         self.pause_btn.hide()
         self.stop_btn.hide()
         
-        self.set_status("Transcribing...", "#3b82f6")
         path = self.audio_engine.stop_recording()
         api_client = self.get_api_client()
         
-        if api_client and path:
-            try:
-                text = api_client.transcribe_audio(path)
-                current = self.overview_input.toPlainText()
-                new_text = f"{current}\n\n{text}".strip() if current else text
-                self.overview_input.setPlainText(new_text)
-                self.on_toast("Transcript updated", "success")
-                self.set_status("Status", "#10b981")
-            except Exception as e:
-                self.on_toast(str(e), "error")
-                self.set_status(f"Error: {str(e)}", "#ef4444")
-            finally:
-                self.audio_engine.cleanup_temp_file(path)
+        if not api_client:
+            self.on_toast("API key not configured", "error")
+            if path: self.audio_engine.cleanup_temp_file(path)
+            return
+
+        if path:
+            logger.info(f"Starting transcription: mode={self.work_mode}, audio_path={path}")
+
+            self._current_audio_path = path
+            self.set_status("Transcribing...", "#3b82f6")
+            self._loading_dialog = LoadingDialog("Transcribing your audio...", self)
+            self._loading_dialog.show()
+
+            # Choose correct API method based on mode
+            if self.work_mode == "comment":
+                task_func = self._transcribe_and_polish
+                self.worker = Worker(task_func, path, api_client)
+            else:
+                self.worker = Worker(api_client.transcribe_audio, path)
+            # THREAD SAFETY: Use QueuedConnection
+            self.worker.finished.connect(self.on_transcription_success, Qt.ConnectionType.QueuedConnection)
+            self.worker.error.connect(self.on_worker_error, Qt.ConnectionType.QueuedConnection)
+            self.worker.start()
+
+    def _transcribe_and_polish(self, path, api_client):
+        raw_text = api_client.transcribe_audio(path)
+        polished_text = api_client.polish_comment(raw_text)
+        return polished_text
+
+    def on_transcription_success(self, text):
+        logger.info(f"Transcription completed successfully: {len(text)} characters")
+
+        if hasattr(self, '_loading_dialog'): self._loading_dialog.close()
+        current = self.overview_input.toPlainText()
+        new_text = f"{current}\n\n{text}".strip() if current else text
+        self.overview_input.setPlainText(new_text)
+
+        msg = "Comment polished" if self.work_mode == "comment" else "Transcript updated"
+        self.on_toast(msg, "success")
+        self.set_status("Status", "#10b981")
+        if hasattr(self, '_current_audio_path'):
+            self.audio_engine.cleanup_temp_file(self._current_audio_path)
 
     def generate_story(self):
         overview = self.overview_input.toPlainText()
@@ -641,37 +678,101 @@ class WorkTrackerMode(QWidget):
             self.on_toast("API key not configured", "error")
             return
 
-        self._loading_dialog = LoadingDialog("Generating Summary...", self)
-        self._loading_dialog.show()
-        self.set_status("Generating Summary...", "#3b82f6")
+        # THREAD SAFETY: Check if worker already running
+        if self._worker_running:
+            self.on_toast("Please wait for current operation to finish", "warning")
+            logger.warning("Blocked duplicate API request - worker already running")
+            return
+
+        # THREAD SAFETY: Stop any existing worker
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            logger.info("Stopping previous worker thread")
+            try:
+                self.worker.finished.disconnect()
+                self.worker.error.disconnect()
+            except:
+                pass  # Already disconnected
+            self.worker.terminate()
+            self.worker.wait(100)
+
+        # Set running flag
+        self._worker_running = True
+        logger.info(f"Starting story generation: overview length={len(overview)} chars")
+
+        # Non-blocking UI updates
+        self.generate_btn.setEnabled(False)
+        self.generate_btn.setText("Generating...")
+        self.set_status("Generating Summary... (this may take a moment)", "#3b82f6")
 
         self.worker = Worker(api_client.generate_story_from_overview, overview)
-        self.worker.finished.connect(self.on_story_success)
-        self.worker.error.connect(self.on_worker_error)
+        # THREAD SAFETY: Use QueuedConnection to ensure UI updates on main thread
+        self.worker.finished.connect(self.on_story_success, Qt.ConnectionType.QueuedConnection)
+        self.worker.error.connect(self.on_worker_error, Qt.ConnectionType.QueuedConnection)
         self.worker.start()
 
     def on_story_success(self, story_data):
-        if hasattr(self, '_loading_dialog'): self._loading_dialog.close()
-        
-        full_result = f"SUMMARY: {story_data['summary']}\n\nDESCRIPTION:\n{story_data['description']}"
-        self.ai_summary_output.setPlainText(full_result)
-        
-        # Prepare story data
-        self.story['overview'] = self.overview_input.toPlainText()
-        self.story['title'] = story_data['summary']
-        self.story['description'] = story_data['description']
-        
-        # Save and refresh
-        self.save_story()
-        self.refresh_history()
-        
-        self.on_toast("Summary generated & saved", "success")
-        self.set_status("Ready", "#10b981")
+        # THREAD SAFETY: Always clear running flag
+        self._worker_running = False
+        logger.info("Story generation completed successfully")
+
+        try:
+            # Prepare story data
+            self.story['overview'] = self.overview_input.toPlainText()
+            self.story['title'] = story_data.get('summary', 'Untitled')
+            self.story['description'] = story_data.get('description', '')
+
+            full_result = f"### SUMMARY: {self.story['title']}\n\n---\n\n#### DESCRIPTION:\n{self.story['description']}"
+
+            try:
+                self.ai_summary_output.setMarkdown(full_result)
+            except Exception:
+                logger.warning("Markdown rendering failed, falling back to plain text")
+                self.ai_summary_output.setPlainText(full_result)
+
+            # Save and refresh
+            self.save_story()
+            self.refresh_history()
+
+            self.on_toast("Summary generated & saved", "success")
+            self.set_status("Ready", "#10b981")
+        except Exception as e:
+            logger.exception("Error processing story data")
+            self.on_toast(f"Error: {str(e)}", "error")
+            self.set_status("Error", "#ef4444")
+
+        # Restore UI
+        self.generate_btn.setEnabled(True)
+        self.generate_btn.setText("Generate AI Summary")
+        if hasattr(self, 'worker'):
+            self.worker.deleteLater()
 
     def on_worker_error(self, message):
-        if hasattr(self, '_loading_dialog'): self._loading_dialog.close()
-        self.on_toast(f"Error: {message}", "error")
-        self.set_status(f"Error: {message}", "#ef4444")
+        # THREAD SAFETY: Always clear running flag
+        self._worker_running = False
+        logger.error(f"Worker error: {message}")
+
+        if hasattr(self, '_loading_dialog'):
+            self._loading_dialog.close()
+
+        # Provide helpful error messages
+        if "401" in message or "Invalid" in message or "unauthorized" in message.lower():
+            self.on_toast("Invalid API key. Check Settings and try again.", "error")
+            self.set_status("Error: Invalid API Key", "#ef4444")
+        elif "timeout" in message.lower() or "connection" in message.lower():
+            self.on_toast("Network error. Check your connection and try again.", "error")
+            self.set_status("Error: Network Failure", "#ef4444")
+        elif "rate limit" in message.lower():
+            self.on_toast(message, "warning")
+            self.set_status("Rate limit reached", "#f59e0b")
+        else:
+            self.on_toast(f"Error: {message}", "error")
+            self.set_status(f"Error: {message}", "#ef4444")
+
+        # Restore UI
+        self.generate_btn.setEnabled(True)
+        self.generate_btn.setText("Generate AI Summary")
+        if hasattr(self, 'worker'):
+            self.worker.deleteLater()
 
     def copy_summary(self):
         text = self.ai_summary_output.toPlainText()
@@ -766,8 +867,8 @@ class WorkTrackerMode(QWidget):
         
         self.story = data
         self.overview_input.setPlainText(data.get('overview', ''))
-        result = f"SUMMARY: {data.get('title', 'Untitled')}\n\nDESCRIPTION:\n{data.get('description', '')}"
-        self.ai_summary_output.setPlainText(result)
+        result = f"### SUMMARY: {data.get('title', 'Untitled')}\n\n---\n\n#### DESCRIPTION:\n{data.get('description', '')}"
+        self.ai_summary_output.setMarkdown(result) # Use setMarkdown
         
         # Ensure comments is a list
         if isinstance(self.story.get('comments'), str):
@@ -812,10 +913,9 @@ class WorkTrackerMode(QWidget):
         
         # Reload current story data to restore view
         if self.story and self.story.get('id'):
-             # Ideally fetch fresh from DB, but for now restore from memory
              self.overview_input.setPlainText(self.story.get('overview', ''))
-             result = f"SUMMARY: {self.story.get('title', 'Untitled')}\n\nDESCRIPTION:\n{self.story.get('description', '')}"
-             self.ai_summary_output.setPlainText(result)
+             result = f"### SUMMARY: {self.story.get('title', 'Untitled')}\n\n---\n\n#### DESCRIPTION:\n{self.story.get('description', '')}"
+             self.ai_summary_output.setMarkdown(result)
 
     def handle_save_action(self):
         if self.work_mode == "story":
@@ -878,40 +978,25 @@ class WorkTrackerMode(QWidget):
                 except Exception as e:
                     self.on_toast(f"Failed to delete: {str(e)}", "error")
 
-    def add_comment(self):
-        note = self.comm_input.text().strip()
-        if not note: return
-        
-        if 'comments' not in self.story or not isinstance(self.story['comments'], list):
-            self.story['comments'] = []
-            
-        timestamp = datetime.now().strftime("%H:%M")
-        full_note = f"[{timestamp}] {note}"
-        self.story['comments'].append(full_note)
-        
-        self.load_comments()
-        self.comm_input.clear()
-        
-        # Auto-save if it's an existing story
-        if self.story.get('id'):
-            self.save_story()
-
-
     def save_story(self):
         # Update text content before saving
         if not self.story['title'] and self.overview_input.toPlainText():
             self.story['title'] = self.overview_input.toPlainText()[:50] + "..."
             
+        # Flexible parsing to handle manual edits in the output box
         full_text = self.ai_summary_output.toPlainText()
-        if "SUMMARY: " in full_text and "DESCRIPTION:" in full_text:
-            parts = full_text.split("DESCRIPTION:")
-            self.story['title'] = parts[0].replace("SUMMARY: ", "").strip()
+        if "SUMMARY:" in full_text and "DESCRIPTION:" in full_text:
+            # Strip markdown artifacts if present
+            clean_text = full_text.replace("### ", "").replace("#### ", "").replace("---", "")
+            parts = clean_text.split("DESCRIPTION:")
+            self.story['title'] = parts[0].replace("SUMMARY:", "").strip()
             self.story['description'] = parts[1].strip()
         
         self.story['overview'] = self.overview_input.toPlainText()
 
         try:
-            self.db_manager.save_work_story(self.story)
+            new_id = self.db_manager.save_work_story(self.story)
+            self.story['id'] = new_id # Crucial: capture the ID to prevent duplicates
             self.refresh_history()
             self.on_toast("Story saved", "success")
             # Enable add comment if saved for first time
@@ -920,40 +1005,13 @@ class WorkTrackerMode(QWidget):
         except Exception as e:
             self.on_toast(f"Save failed: {str(e)}", "error")
 
-    def save_and_export(self):
-        # Just save, export is handled separately now
-        self.save_story()
-
     def export_story_to_file(self):
-        if not self.story.get('overview'):
-            self.on_toast("Nothing to export!", "error")
-            return
-            
-        file_name, _ = QFileDialog.getSaveFileName(self, "Export Story", 
-                                                 f"{self.story.get('title', 'story')}.txt", 
-                                                 "Text Files (*.txt);;All Files (*)")
-        if file_name:
-            try:
-                with open(file_name, 'w', encoding='utf-8') as f:
-                    f.write(f"TITLE: {self.story.get('title', 'Untitled')}\n")
-                    f.write(f"DATE: {self.story.get('created_at', datetime.now().strftime('%Y-%m-%d'))}\n")
-                    f.write("-" * 40 + "\n\n")
-                    f.write(f"SUMMARY:\n{self.story.get('title', '')}\n\n")
-                    f.write(f"DESCRIPTION:\n{self.story.get('description', '')}\n\n")
-                    f.write("-" * 40 + "\n\n")
-                    f.write("COMMENTS:\n")
-                    for c in self.story.get('comments', []):
-                        f.write(f"- {c}\n")
-                    f.write("\n" + "-" * 40 + "\n")
-                    f.write("RAW TRANSCRIPT:\n")
-                    f.write(self.story.get('overview', ''))
-                
-                self.on_toast("Export successful!", "success")
-            except Exception as e:
-                self.on_toast(f"Export failed: {str(e)}", "error")
-
-    def show_history(self):
-        pass # Sidebar is persistent now
+        success, message = export_story_file(self, self.story)
+        if success:
+            self.on_toast(message, "success")
+        else:
+            if "cancelled" not in message:
+                self.on_toast(message, "error")
 
     def clear_session(self):
         # Safety Valve: check for unsaved content

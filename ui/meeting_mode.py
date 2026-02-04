@@ -5,13 +5,15 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QListWidget, QListWidgetItem, QDialog, QLineEdit, QApplication, QMessageBox)
 from ui.utils import Worker, LoadingDialog, WaveformVisualizer, set_native_grey_theme, StyledConfirmDialog
 from ui.export_utils import export_meeting
+from logger_config import logger
 
 class MeetingMode(QWidget):
-    def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, set_status_cb, parent=None):
+    def __init__(self, audio_engine, db_manager, get_api_client_cb, on_toast, set_status_cb, get_settings_cb=None, parent=None):
         super().__init__(parent)
         self.audio_engine = audio_engine
         self.db_manager = db_manager
         self.get_api_client = get_api_client_cb
+        self.get_settings = get_settings_cb or (lambda: {})
         self.on_toast = on_toast
         self.set_status = set_status_cb
 
@@ -19,6 +21,8 @@ class MeetingMode(QWidget):
         self.timer.timeout.connect(self.update_timer)
         self.seconds_elapsed = 0
         self.recording_active = False
+        self._current_meeting_id = None
+        self._worker_running = False  # Thread safety flag
 
         self.init_ui()
 
@@ -164,7 +168,7 @@ class MeetingMode(QWidget):
         
         # Summary Side
         self.summary_container = QFrame()
-        self.summary_container.setFixedWidth(300)
+        self.summary_container.setFixedWidth(450) # Increased from 300 to better fit tables
         self.summary_container.setObjectName("SummaryContainer")
         summary_layout = QVBoxLayout(self.summary_container)
  
@@ -200,8 +204,7 @@ class MeetingMode(QWidget):
 
     def toggle_recording(self):
         if not self.recording_active:
-            # Start recording with device from settings
-            device_id = None  # Use default if not set
+            device_id = self.get_settings().get('audioInputDevice') or None
             self.audio_engine.start_recording(device_id)
             self.audio_engine.on_data = self.waveform.update_level
 
@@ -259,6 +262,8 @@ class MeetingMode(QWidget):
         self.timer_label.setText(f"{h:02d}:{m:02d}:{s:02d}")
 
     def transcribe(self, path):
+        logger.info(f"Starting transcription: audio_path={path}")
+
         api_client = self.get_api_client()
         if not api_client:
             self.on_toast("API key not configured. Open Settings to add your API key.", "error")
@@ -272,11 +277,13 @@ class MeetingMode(QWidget):
         self.set_status("Transcribing...", "#3b82f6")
 
         self.worker = Worker(api_client.transcribe_audio, path)
-        self.worker.finished.connect(self.on_transcription_success)
-        self.worker.error.connect(self.on_worker_error)
+        self.worker.finished.connect(self.on_transcription_success, Qt.ConnectionType.QueuedConnection)
+        self.worker.error.connect(self.on_worker_error, Qt.ConnectionType.QueuedConnection)
         self.worker.start()
 
     def on_transcription_success(self, text):
+        logger.info(f"Transcription completed successfully: {len(text)} characters")
+
         if hasattr(self, '_loading_dialog'):
             self._loading_dialog.close()
         self.transcript_edit.setPlainText(text)
@@ -298,23 +305,76 @@ class MeetingMode(QWidget):
             self.on_toast("API key not configured. Open Settings to add your API key.", "error")
             return
 
-        self._loading_dialog = LoadingDialog("✨ Generating AI summary...", self)
-        self._loading_dialog.show()
+        # THREAD SAFETY: Check if worker already running
+        if self._worker_running:
+            self.on_toast("Please wait for current operation to finish", "warning")
+            logger.warning("Blocked duplicate API request - worker already running")
+            return
+
+        # THREAD SAFETY: Stop any existing worker
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            logger.info("Stopping previous worker thread")
+            try:
+                self.worker.finished.disconnect()
+                self.worker.error.disconnect()
+            except:
+                pass  # Already disconnected
+            self.worker.terminate()
+            self.worker.wait(100)
+
+        # Set running flag
+        self._worker_running = True
+        logger.info(f"Starting AI summary generation: transcript length={len(transcript)} chars")
+
+        # Non-blocking UI updates
+        self.summary_btn.setEnabled(False)
+        self.summary_btn.setText("Generating...")
+        self.set_status("Generating AI summary... (this may take a moment)", "#3b82f6")
 
         self.worker = Worker(api_client.generate_meeting_summary, transcript)
-        self.worker.finished.connect(self.on_summary_success)
-        self.worker.error.connect(self.on_worker_error)
+        # THREAD SAFETY: Use QueuedConnection to ensure UI updates on main thread
+        self.worker.finished.connect(self.on_summary_success, Qt.ConnectionType.QueuedConnection)
+        self.worker.error.connect(self.on_worker_error, Qt.ConnectionType.QueuedConnection)
         self.worker.start()
 
     def on_summary_success(self, summary):
-        if hasattr(self, '_loading_dialog'):
-            self._loading_dialog.close()
-        self.summary_view.setPlainText(summary)
-        self.on_toast("✓ Summary generated", "success")
+        # THREAD SAFETY: Always clear running flag
+        self._worker_running = False
+        logger.info("AI summary generation completed successfully")
+
+        try:
+            self.summary_view.setMarkdown(summary)
+            self.on_toast("✓ Summary generated", "success")
+        except Exception as e:
+            logger.exception("Error rendering summary markdown")
+            # Fallback to plain text if markdown rendering fails
+            self.summary_view.setPlainText(summary)
+            self.on_toast("✓ Summary generated (plain text fallback)", "success")
+
+        # Restore UI
+        self.summary_btn.setEnabled(True)
+        self.summary_btn.setText("Generate AI Summary")
+        self.set_status("Ready", "#10b981")
+
+        if hasattr(self, 'worker'):
+            self.worker.deleteLater()
 
     def on_worker_error(self, message):
+        # THREAD SAFETY: Always clear running flag
+        self._worker_running = False
+        logger.error(f"Worker error: {message}")
+
+        # Close loading dialog if open (transcription errors)
         if hasattr(self, '_loading_dialog'):
             self._loading_dialog.close()
+
+        # Restore UI on error
+        self.summary_btn.setEnabled(True)
+        self.summary_btn.setText("Generate AI Summary")
+
+        if hasattr(self, 'worker'):
+            self.worker.deleteLater()
+
         # Provide helpful error messages
         if "401" in message or "Invalid" in message or "unauthorized" in message.lower():
             self.on_toast("Invalid API key. Check Settings and try again.", "error")
@@ -322,12 +382,19 @@ class MeetingMode(QWidget):
         elif "timeout" in message.lower() or "connection" in message.lower():
             self.on_toast("Network error. Check your connection and try again.", "error")
             self.set_status("Error: Network Failure", "#ef4444")
+        elif "rate limit" in message.lower():
+            self.on_toast(message, "warning")
+            self.set_status("Rate limit reached", "#f59e0b")
         else:
             self.on_toast(f"Error: {message}", "error")
             self.set_status(f"Error: {message}", "#ef4444")
-        self.reset_record_btn()
+
+        # Only reset record button and clean audio if we were in the middle of transcription
+        if self.recording_active or not self.record_btn.isEnabled():
+            self.reset_record_btn()
         if hasattr(self, '_current_audio_path'):
             self.audio_engine.cleanup_temp_file(self._current_audio_path)
+            del self._current_audio_path
 
     def show_history(self):
         dialog = QDialog(self)
@@ -498,7 +565,9 @@ class MeetingMode(QWidget):
                     data = curr.data(Qt.ItemDataRole.UserRole)
                     self.title_input.setText(data['title'])
                     self.transcript_edit.setPlainText(data['content'])
-                    self.summary_view.setPlainText(data['summary'])
+                    self.summary_view.setMarkdown(data['summary']) # Use setMarkdown
+                    self._current_meeting_id = data.get('id') # Capture ID
+                    self.seconds_elapsed = data.get('duration', 0)
                     dialog.accept()
 
             open_btn.clicked.connect(load)
@@ -544,12 +613,14 @@ class MeetingMode(QWidget):
 
         try:
             data = {
+                'id': self._current_meeting_id, # Include ID for update
                 'title': title,
                 'content': content,
                 'summary': summary,
                 'duration': self.seconds_elapsed
             }
-            self.db_manager.save_transcript(data)
+            new_id = self.db_manager.save_transcript(data)
+            self._current_meeting_id = new_id # Save the returned ID
             self.on_toast("Transcript saved locally", "success")
         except Exception as e:
             self.on_toast(f"Failed to save: {str(e)}", "error")
@@ -613,6 +684,7 @@ class MeetingMode(QWidget):
                 return
 
         # Reset UI
+        self._current_meeting_id = None
         self.title_input.clear()
         self.transcript_edit.clear()
         self.summary_view.clear()

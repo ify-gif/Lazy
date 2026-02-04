@@ -55,7 +55,38 @@ class SettingsDialog(QDialog):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
         # Consistent label styling
-        label_style = "color: #e4e4e7; font-weight: bold;"
+        label_style = "color: {{ foreground }}; font-weight: bold;"
+
+        # --- Appearance Section ---
+        appearance_label = QLabel("Appearance")
+        appearance_label.setStyleSheet("color: {{ accent }}; font-size: 14px; font-weight: bold; margin-bottom: 5px;")
+        layout.addWidget(appearance_label)
+
+        appearance_form = QFormLayout()
+        appearance_form.setSpacing(20)
+        appearance_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        
+        self.theme_combo = QComboBox()
+        self.theme_combo.setFixedHeight(40)
+        self.theme_combo.addItems(["Dark (Default)", "Light"])
+        settings_theme = self.settings.get('theme', 'dark')
+        self.theme_combo.setCurrentIndex(1 if settings_theme == 'light' else 0)
+        
+        theme_label = QLabel("Theme:")
+        theme_label.setMinimumWidth(160)
+        # Use simple style if labels aren't picking up global Stylesheet yet
+        # But we will rely on global stylesheet for colors mostly
+        appearance_form.addRow(theme_label, self.theme_combo)
+        
+        layout.addLayout(appearance_form)
+        
+        # Spacer
+        layout.addSpacing(20)
+        
+        # --- API Section ---
+        api_header = QLabel("API Configuration")
+        api_header.setStyleSheet("color: {{ accent }}; font-size: 14px; font-weight: bold; margin-bottom: 5px;")
+        layout.addWidget(api_header)
 
         # API Key row with validate button
         key_layout = QHBoxLayout()
@@ -96,7 +127,9 @@ class SettingsDialog(QDialog):
         tokens_label.setStyleSheet(label_style)
         form.addRow(tokens_label, self.max_tokens)
 
-        # Audio Input Device
+        # Audio Input Device with Test Button
+        device_layout = QHBoxLayout()
+
         self.device_combo = QComboBox()
         self.device_combo.setFixedHeight(40)
         if self.audio_engine:
@@ -107,11 +140,26 @@ class SettingsDialog(QDialog):
                     self.device_combo.addItem(dev['name'], i)
                     if i == saved_device_id:
                         self.device_combo.setCurrentIndex(self.device_combo.count() - 1)
-        
+
+        device_layout.addWidget(self.device_combo)
+
+        self.test_audio_btn = QPushButton("Test Audio")
+        self.test_audio_btn.setFixedWidth(110)
+        self.test_audio_btn.setFixedHeight(40)
+        self.test_audio_btn.setStyleSheet("border: 1px solid #d0d0d0;")
+        self.test_audio_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.test_audio_btn.clicked.connect(self.test_audio)
+        device_layout.addWidget(self.test_audio_btn)
+
         audio_label = QLabel("Audio Input Device:")
         audio_label.setMinimumWidth(160)
         audio_label.setStyleSheet(label_style)
-        form.addRow(audio_label, self.device_combo)
+        form.addRow(audio_label, device_layout)
+
+        # Status label for audio test feedback
+        self.audio_status_label = QLabel("")
+        self.audio_status_label.setStyleSheet("font-size: 11px; margin-left: 5px;")
+        form.addRow("", self.audio_status_label)
 
         layout.addLayout(form)
 
@@ -155,12 +203,75 @@ class SettingsDialog(QDialog):
         self.validate_btn.setEnabled(True)
         self.validate_btn.setText("Validate")
 
+    def test_audio(self):
+        """Test audio recording and playback"""
+        from logger_config import logger
+        import sounddevice as sd
+        import numpy as np
+
+        logger.info("Audio test starting")
+
+        # Get selected device
+        device_id = self.device_combo.currentData()
+        if device_id is None:
+            self.audio_status_label.setText("Please select a device first")
+            self.audio_status_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+            return
+
+        try:
+            # Update UI
+            self.test_audio_btn.setEnabled(False)
+            self.test_audio_btn.setText("Recording...")
+            self.audio_status_label.setText("Recording 2 seconds...")
+            self.audio_status_label.setStyleSheet("color: #3b82f6; font-size: 11px;")
+
+            # Process events to update UI
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+
+            # Record 2 seconds
+            samplerate = 16000
+            duration = 2.0
+
+            logger.info(f"Recording from device {device_id} for {duration}s")
+            recording = sd.rec(int(duration * samplerate),
+                              samplerate=samplerate,
+                              channels=1,
+                              device=device_id)
+            sd.wait()  # Wait for recording to complete
+
+            logger.info("Recording complete, playing back")
+
+            # Update UI
+            self.test_audio_btn.setText("Playing...")
+            self.audio_status_label.setText("Playing back recording...")
+            QApplication.processEvents()
+
+            # Play back
+            sd.play(recording, samplerate)
+            sd.wait()  # Wait for playback to complete
+
+            # Success
+            self.audio_status_label.setText("✓ Audio test successful!")
+            self.audio_status_label.setStyleSheet("color: #10b981; font-size: 11px;")
+            logger.info("Audio test successful")
+
+        except Exception as e:
+            logger.exception("Audio test failed")
+            self.audio_status_label.setText(f"✗ Test failed: {str(e)}")
+            self.audio_status_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+        finally:
+            # Restore button
+            self.test_audio_btn.setEnabled(True)
+            self.test_audio_btn.setText("Test Audio")
+
     def handle_save(self):
         new_settings = {
             'openaiApiKey': self.openai_key.text(),
             'openaiModel': self.openai_model.text(),
             'openaiMaxTokens': self.max_tokens.value(),
-            'audioInputDevice': self.device_combo.currentData() or 0
+            'audioInputDevice': self.device_combo.currentData() or 0,
+            'theme': 'light' if self.theme_combo.currentIndex() == 1 else 'dark'
         }
         self.on_save(new_settings)
         self.accept()

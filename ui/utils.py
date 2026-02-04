@@ -7,15 +7,145 @@ import traceback
 import numpy as np
 import sys
 import ctypes
+import threading
+from logger_config import logger
 
 def set_native_grey_theme(hwnd):
     """Set Windows native title bar to grey color (matches premium look)"""
     # Grey color: 0x00A0A0A0 (BGR format)
-    grey_color = 0x00A0A0A0 
+    grey_color = 0x00A0A0A0
     try:
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(ctypes.c_int(grey_color)), 4)
     except Exception:
         pass
+
+
+def set_window_icon_windows(hwnd, icon_path):
+    """Forcefully set window icon using Windows API (taskbar + title bar)"""
+    if not sys.platform == 'win32':
+        return
+
+    try:
+        # Constants
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0  # Title bar icon (16x16)
+        ICON_BIG = 1    # Alt+Tab and taskbar icon (32x32)
+
+        # LoadImage constants
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x00000010
+        LR_DEFAULTSIZE = 0x00000040
+        LR_SHARED = 0x00008000
+
+        # GetClassLong/SetClassLong constants for taskbar icon override
+        GCL_HICON = -14  # Application icon
+        GCL_HICONSM = -34  # Small icon
+        GCLP_HICON = -14
+        GCLP_HICONSM = -34
+
+        # Convert to absolute path
+        import os
+        abs_icon_path = os.path.abspath(icon_path)
+
+        print(f"\n{'='*60}")
+        print(f"LOADING ICON: {abs_icon_path}")
+        print(f"{'='*60}")
+
+        # Load multiple icon sizes from the .ico file
+        hicon_16 = ctypes.windll.user32.LoadImageW(
+            None, abs_icon_path, IMAGE_ICON, 16, 16,
+            LR_LOADFROMFILE | LR_SHARED
+        )
+
+        hicon_20 = ctypes.windll.user32.LoadImageW(
+            None, abs_icon_path, IMAGE_ICON, 20, 20,
+            LR_LOADFROMFILE | LR_SHARED
+        )
+
+        hicon_32 = ctypes.windll.user32.LoadImageW(
+            None, abs_icon_path, IMAGE_ICON, 32, 32,
+            LR_LOADFROMFILE | LR_SHARED
+        )
+
+        hicon_48 = ctypes.windll.user32.LoadImageW(
+            None, abs_icon_path, IMAGE_ICON, 48, 48,
+            LR_LOADFROMFILE | LR_SHARED
+        )
+
+        # Default size (let Windows choose best)
+        hicon_default = ctypes.windll.user32.LoadImageW(
+            None, abs_icon_path, IMAGE_ICON, 0, 0,
+            LR_LOADFROMFILE | LR_DEFAULTSIZE | LR_SHARED
+        )
+
+        success_count = 0
+
+        # Method 1: WM_SETICON (Window-level)
+        if hicon_16:
+            ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_16)
+            success_count += 1
+            print(f"✓ WM_SETICON small (16x16): {hicon_16}")
+
+        if hicon_32:
+            ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_32)
+            success_count += 1
+            print(f"✓ WM_SETICON large (32x32): {hicon_32}")
+
+        # Method 2: SetClassLongPtr (Class-level - affects taskbar)
+        # This is MORE aggressive and overrides the Python icon
+        try:
+            if hicon_16:
+                result = ctypes.windll.user32.SetClassLongPtrW(hwnd, GCLP_HICONSM, hicon_16)
+                print(f"✓ SetClassLongPtr small (16x16): {result}")
+                success_count += 1
+        except Exception as e:
+            print(f"  SetClassLongPtrW SMALL failed: {e}")
+            # Try 32-bit version
+            try:
+                result = ctypes.windll.user32.SetClassLongW(hwnd, GCL_HICONSM, hicon_16)
+                print(f"✓ SetClassLong small (16x16): {result}")
+                success_count += 1
+            except Exception as e2:
+                print(f"  SetClassLongW SMALL also failed: {e2}")
+
+        try:
+            # Use the best available large icon
+            best_large = hicon_48 or hicon_32 or hicon_default
+            if best_large:
+                result = ctypes.windll.user32.SetClassLongPtrW(hwnd, GCLP_HICON, best_large)
+                print(f"✓ SetClassLongPtr large (taskbar): {result}")
+                success_count += 1
+        except Exception as e:
+            print(f"  SetClassLongPtrW LARGE failed: {e}")
+            # Try 32-bit version
+            try:
+                best_large = hicon_48 or hicon_32 or hicon_default
+                if best_large:
+                    result = ctypes.windll.user32.SetClassLongW(hwnd, GCL_HICON, best_large)
+                    print(f"✓ SetClassLong large (taskbar): {result}")
+                    success_count += 1
+            except Exception as e2:
+                print(f"  SetClassLongW LARGE also failed: {e2}")
+
+        # Method 3: Force taskbar to refresh
+        try:
+            # Send a message to force taskbar icon refresh
+            ctypes.windll.user32.UpdateWindow(hwnd)
+            print(f"✓ UpdateWindow called")
+        except:
+            pass
+
+        print(f"{'='*60}")
+        print(f"ICON OPERATIONS COMPLETE: {success_count} successful")
+        print(f"{'='*60}\n")
+
+    except Exception as e:
+        import traceback
+        print(f"\n{'='*60}")
+        print(f"ERROR setting window icon:")
+        print(f"{'='*60}")
+        traceback.print_exc()
+        print(f"{'='*60}\n")
 
 
 class Worker(QThread):
@@ -29,10 +159,16 @@ class Worker(QThread):
         self.kwargs = kwargs
 
     def run(self):
+        thread_id = threading.current_thread().name
+        thread_native_id = threading.get_native_id()
+        logger.info(f"Worker thread starting: function={self.fn.__name__}, thread={thread_id}, native_id={thread_native_id}")
+
         try:
             result = self.fn(*self.args, **self.kwargs)
+            logger.info(f"Worker thread completed successfully: function={self.fn.__name__}, thread={thread_id}")
             self.finished.emit(result)
         except Exception as e:
+            logger.exception(f"Worker thread failed: function={self.fn.__name__}, thread={thread_id}")
             traceback.print_exc()
             self.error.emit(str(e))
 

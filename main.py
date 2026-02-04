@@ -5,26 +5,40 @@ import ctypes
 import keyring
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QStackedWidget,
-                             QFrame, QSizePolicy)
-from PyQt6.QtCore import Qt, QSize, QTimer, QUrl, QObject, pyqtSlot
-from PyQt6.QtGui import QColor, QPainter, QLinearGradient, QFont, QIcon
+                             QFrame, QSystemTrayIcon, QMenu)
+from PyQt6.QtCore import Qt, QSize, QTimer, QUrl, QObject, pyqtSlot, QIODevice
+from PyQt6.QtGui import QColor, QIcon, QAction
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineSettings
+from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
 from PyQt6.QtWebChannel import QWebChannel
 from dotenv import load_dotenv
 
 KEYRING_SERVICE = "lazy-app"
 KEYRING_USERNAME = "openai-api-key"
 
-load_dotenv() 
+load_dotenv()
 
+# Initialize logging FIRST (before other imports)
+from logger_config import logger
+
+logger.info("="*60)
+logger.info("LAZY Application Starting")
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Platform: {sys.platform}")
+logger.info(f"Working directory: {os.getcwd()}")
+logger.info("="*60)
+
+from version import __version__
+from updater import check_for_update
 from api_client import APIClient
 from audio_engine import AudioEngine
 from database_manager import DatabaseManager
 from ui.meeting_mode import MeetingMode
 from ui.work_tracker_mode import WorkTrackerMode
 from ui.settings_dialog import SettingsDialog
-from ui.utils import set_native_grey_theme, PulsatingIcon, CheatSheetPopover
+from ui.theme_manager import ThemeManager
+from ui.utils import set_native_grey_theme, set_window_icon_windows, PulsatingIcon, CheatSheetPopover
 
 
 class Bridge(QObject):
@@ -39,33 +53,167 @@ class Bridge(QObject):
 class LazyApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+        logger.info("LazyApp initializing")
+
         self.setWindowTitle("LAZY - Audio Transcription & Work Tracker")
         self.setMinimumSize(1100, 750)
-        
-        # Set Window Icon (Absolute Path)
+
+        # Set Window Icon (Absolute Path) - ENHANCED VERSION
         app_dir = os.path.dirname(os.path.abspath(__file__))
-        self.icon_path = os.path.join(app_dir, "assets", "app_icon.ico")
-        if os.path.exists(self.icon_path):
-            self.setWindowIcon(QIcon(self.icon_path))
-        
+
+        # Try new light mode icon first, then fallbacks
+        icon_candidates = [
+            os.path.join(app_dir, "assets", "lazy_icon.ico"),  # New multi-res version
+            os.path.join(app_dir, "assets", "Lazy Light Mode_optimized icon.ico"),  # Original light mode
+            os.path.join(app_dir, "assets", "app_icon_square.ico"),
+            os.path.join(app_dir, "assets", "app_icon.ico"),
+            os.path.join(app_dir, "assets", "icon.png")
+        ]
+
+        self.icon_path = None
+        for icon_file in icon_candidates:
+            if os.path.exists(icon_file):
+                self.icon_path = icon_file
+                break
+
+        # Set icon immediately via PyQt6
+        if self.icon_path:
+            icon = QIcon(self.icon_path)
+            if not icon.isNull():
+                self.setWindowIcon(icon)
+                print(f"PyQt6 icon set from: {self.icon_path}")
+            else:
+                print(f"Failed to load icon: {self.icon_path}")
+
         self.settings_path = os.path.join(os.path.expanduser("~"), ".lazy_settings.json")
         self.settings = self.load_settings()
-        
+        logger.info(f"Settings loaded from: {self.settings_path}")
+
         self.audio_engine = AudioEngine()
-        
+        logger.info("AudioEngine initialized")
+
         self.db_manager = DatabaseManager()
+        logger.info("DatabaseManager initialized")
+
         self.api_client = self.init_api_client()
-        
+        logger.info(f"APIClient initialized: configured={self.api_client is not None}")
+
         self.init_ui()
-        self.load_styles()
-        
-        # Apply Grey Theme after showing or in init if HWND is ready
+        self.init_ui()
+        # Apply initial theme
+        current_theme = self.settings.get('theme', 'dark')
+        ThemeManager.apply_theme(QApplication.instance(), current_theme)
+        logger.info(f"UI initialized and {current_theme} theme applied")
+
+        # Apply Grey Theme and Windows icon after showing or in init if HWND is ready
         QTimer.singleShot(0, self.apply_theme)
+        QTimer.singleShot(100, self.apply_windows_icon)  # Apply icon via Windows API
+        QTimer.singleShot(3000, self.check_for_updates)  # Check after 3s so startup feels instant
+
+        # Setup system tray icon
+        self.setup_system_tray()
 
     def apply_theme(self):
         if sys.platform == 'win32':
             set_native_grey_theme(int(self.winId()))
+
+    def apply_windows_icon(self):
+        """Apply icon using Windows API for taskbar/title bar"""
+        if sys.platform == 'win32' and self.icon_path and os.path.exists(self.icon_path):
+            print(f"\nApplying Windows API icon from: {self.icon_path}")
+            set_window_icon_windows(int(self.winId()), self.icon_path)
+
+    def setup_system_tray(self):
+        """Initialize system tray icon with context menu"""
+        # Create system tray icon using the same icon as the window
+        self.tray_icon = QSystemTrayIcon(self)
+
+        # Set the icon (use the same icon as the window)
+        if self.icon_path and os.path.exists(self.icon_path):
+            icon = QIcon(self.icon_path)
+            self.tray_icon.setIcon(icon)
+
+        # Create context menu for tray icon
+        tray_menu = QMenu()
+
+        # Show/Hide action
+        show_action = QAction("Show LAZY", self)
+        show_action.triggered.connect(self.show_window)
+        tray_menu.addAction(show_action)
+
+        # Separator
+        tray_menu.addSeparator()
+
+        # Exit action
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.quit_application)
+        tray_menu.addAction(exit_action)
+
+        # Set the context menu
+        self.tray_icon.setContextMenu(tray_menu)
+
+        # Connect double-click to show window
+        self.tray_icon.activated.connect(self.on_tray_icon_activated)
+
+        # Set tooltip
+        self.tray_icon.setToolTip("LAZY - Audio Transcription & Work Tracker")
+
+        # Show the tray icon
+        self.tray_icon.show()
+
+    def on_tray_icon_activated(self, reason):
+        """Handle tray icon activation (click, double-click, etc.)"""
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.show_window()
+
+    def show_window(self):
+        """Show and restore the main window"""
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.activateWindow()
+        self.raise_()
+
+    def hide_to_tray(self):
+        """Hide window to system tray"""
+        self.hide()
+        # Optional: Show a notification
+        if self.tray_icon.supportsMessages():
+            self.tray_icon.showMessage(
+                "LAZY",
+                "Application minimized to tray. Double-click the tray icon to restore.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000  # 2 seconds
+            )
+
+    def quit_application(self):
+        """Completely exit the application"""
+        # Stop any ongoing recordings
+        if hasattr(self, 'audio_engine'):
+            self.audio_engine.stop_recording()
+
+        # Hide tray icon
+        if hasattr(self, 'tray_icon'):
+            self.tray_icon.hide()
+
+        # Close the application
+        QApplication.quit()
+
+    def closeEvent(self, event):
+        """Handle window close event - minimize to tray instead of closing"""
+        # Prevent the window from closing
+        event.ignore()
+
+        # Hide to system tray instead
+        self.hide_to_tray()
+
+    def changeEvent(self, event):
+        """Handle window state changes (minimize, etc.)"""
+        if event.type() == event.Type.WindowStateChange:
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                # User clicked minimize button - hide to tray
+                QTimer.singleShot(0, self.hide_to_tray)
+
+        super().changeEvent(event)
 
     def load_settings(self):
         defaults = {
@@ -79,10 +227,15 @@ class LazyApp(QMainWindow):
                 defaults.update({k: v for k, v in saved.items() if v and k != 'openaiApiKey'})
 
         # Load API key from secure storage (keyring) or env var as fallback
-        stored_key = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
-        if stored_key:
-            defaults['openaiApiKey'] = stored_key
-        elif os.getenv('OPENAI_API_KEY'):
+        # Load API key from secure storage (keyring) or env var as fallback
+        try:
+            stored_key = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
+            if stored_key:
+                defaults['openaiApiKey'] = stored_key
+        except Exception:
+            pass
+
+        if not defaults['openaiApiKey'] and os.getenv('OPENAI_API_KEY'):
             defaults['openaiApiKey'] = os.getenv('OPENAI_API_KEY')
 
         return defaults
@@ -103,7 +256,18 @@ class LazyApp(QMainWindow):
         # Save non-sensitive settings to JSON file
         safe_settings = {k: v for k, v in new_settings.items() if k != 'openaiApiKey'}
         with open(self.settings_path, 'w') as f:
-            json.dump(safe_settings, f)
+            json.dump(safe_settings, f, indent=4) # Indent for readability
+
+        # Check for theme change and apply if needed
+        new_theme = new_settings.get('theme', 'dark')
+        # We don't have 'old_theme' here easily unless we stored it before update
+        # But applying theme is cheap, so we can just re-apply or check against current QApp property if we set one
+        # For now, just apply it.
+        ThemeManager.apply_theme(QApplication.instance(), new_theme)
+        
+        # Update Landing Page if visible
+        if hasattr(self, 'landing_view'):
+            self.landing_view.page().runJavaScript(f"setTheme('{new_theme}');")
 
         self.api_client = self.init_api_client()
 
@@ -118,6 +282,9 @@ class LazyApp(QMainWindow):
 
     def get_api_client(self):
         return self.api_client
+
+    def get_settings(self):
+        return self.settings
 
     def init_ui(self):
         self.central_widget = QWidget()
@@ -189,9 +356,9 @@ class LazyApp(QMainWindow):
         # Content
         self.stack = QStackedWidget()
         self.stack.addWidget(self.create_landing_page())
-        self.meeting_mode = MeetingMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast, self.set_status)
+        self.meeting_mode = MeetingMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast, self.set_status, self.get_settings)
         self.stack.addWidget(self.meeting_mode)
-        self.tracker_mode = WorkTrackerMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast, self.set_status)
+        self.tracker_mode = WorkTrackerMode(self.audio_engine, self.db_manager, self.get_api_client, self.show_toast, self.set_status, self.get_settings)
         self.stack.addWidget(self.tracker_mode)
         self.main_layout.addWidget(self.stack)
         
@@ -207,8 +374,8 @@ class LazyApp(QMainWindow):
         self.status_label = QLabel("Status")
         footer_layout.addWidget(self.status_label)
         footer_layout.addStretch()
-        v_label = QLabel("v1.2.3")
-        footer_layout.addWidget(v_label)
+        self.version_label = QLabel(f"v{__version__}")
+        footer_layout.addWidget(self.version_label)
         self.main_layout.addWidget(self.footer)
         
         # Toast
@@ -225,19 +392,33 @@ class LazyApp(QMainWindow):
         settings = view.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.ShowScrollBars, False)
         settings.setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
-        
+
+        # Keep the page lifecycle active even when not visible to prevent blank screen on return
+        view.page().setLifecycleState(QWebEnginePage.LifecycleState.Active)
+
         view.setStyleSheet("background-color: black;")
         view.page().setBackgroundColor(QColor("black"))
         
+        # Inject theme when loaded
+        view.loadFinished.connect(self.on_landing_load_finished)
+
         self.bridge = Bridge(self.stack)
         self.channel = QWebChannel()
         self.channel.registerObject("backend", self.bridge)
         view.page().setWebChannel(self.channel)
-        
+
         app_dir = os.path.dirname(os.path.abspath(__file__))
         html_path = os.path.join(app_dir, "assets", "landing.html")
         view.setUrl(QUrl.fromLocalFile(html_path))
+
+        # Store reference to prevent garbage collection
+        self.landing_view = view
+
         return view
+
+    def on_landing_load_finished(self):
+        current_theme = self.settings.get('theme', 'dark')
+        self.landing_view.page().runJavaScript(f"setTheme('{current_theme}');")
 
     def open_settings(self):
         dialog = SettingsDialog(self.settings, self.save_settings, self.audio_engine, self)
@@ -246,7 +427,16 @@ class LazyApp(QMainWindow):
     def on_page_changed(self, index):
         is_landing = (index == 0)
         is_work_tracker = (index == 2)
-        
+
+        # Optimize landing page lifecycle to save resources when not visible
+        if hasattr(self, 'landing_view'):
+            if is_landing:
+                # Activate when visible
+                self.landing_view.page().setLifecycleState(QWebEnginePage.LifecycleState.Active)
+            else:
+                # Freeze (preserve state but reduce CPU/GPU usage) when hidden
+                self.landing_view.page().setLifecycleState(QWebEnginePage.LifecycleState.Frozen)
+
         if is_landing:
             # Delay hiding to let the Spline viewer render
             QTimer.singleShot(50, self._hide_header_footer)
@@ -256,7 +446,7 @@ class LazyApp(QMainWindow):
             self.footer.setVisible(True)
             # Toggle far-left info icon visibility based on mode
             self.info_btn.setVisible(is_work_tracker)
-        
+
         if hasattr(self, 'cheat_sheet'):
             self.cheat_sheet.hide()
 
@@ -278,6 +468,34 @@ class LazyApp(QMainWindow):
         self.status_label.setText(message)
         self.status_icon.setStyleSheet(f"background: {color}; border-radius: 4px;")
 
+    def check_for_updates(self):
+        """Kick off update check on a background thread."""
+        from ui.utils import Worker
+        self._update_worker = Worker(check_for_update)
+        self._update_worker.finished.connect(self.on_update_result, Qt.ConnectionType.QueuedConnection)
+        self._update_worker.error.connect(lambda e: logger.warning(f"Update check error: {e}"))
+        self._update_worker.start()
+
+    def on_update_result(self, result):
+        """Called on main thread with the result from check_for_update()."""
+        if not result.get("update_available"):
+            return
+
+        latest = result["latest_version"]
+        self._update_url = result["download_url"]
+        logger.info(f"Update available: v{__version__} -> v{latest}")
+
+        # Turn version label into a clickable update link
+        self.version_label.setText(f"Update available: v{latest}")
+        self.version_label.setStyleSheet("color: #3b82f6; font-weight: bold; text-decoration: underline; cursor: pointer;")
+        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.version_label.mousePressEvent = lambda e: self._open_update_url(self._update_url)
+
+    def _open_update_url(self, url):
+        """Open the GitHub releases page in the default browser."""
+        from PyQt6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl(url))
+
     def show_toast(self, message, msg_type="info"):
         self.toast_label.setText(message)
         colors = {"success": "#10b981", "error": "#ef4444", "warning": "#f59e0b", "info": "#3b82f6"}
@@ -289,11 +507,75 @@ class LazyApp(QMainWindow):
         QTimer.singleShot(3000, self.toast_label.hide)
 
     def load_styles(self):
-        if os.path.exists("styles.qss"):
-            with open("styles.qss", "r") as f:
-                self.setStyleSheet(f.read())
+        # Get the directory where the script/exe is located
+        if getattr(sys, 'frozen', False):
+            # Running as compiled exe - PyInstaller extracts files to _internal
+            app_dir = os.path.dirname(sys.executable)
+            # Check multiple possible locations
+            style_candidates = [
+                os.path.join(app_dir, "styles.qss"),
+                os.path.join(app_dir, "_internal", "styles.qss"),
+                os.path.join(sys._MEIPASS, "styles.qss") if hasattr(sys, '_MEIPASS') else None
+            ]
+        else:
+            # Running as script
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+            style_candidates = [os.path.join(app_dir, "styles.qss")]
+
+        # Try each candidate location
+        for style_path in style_candidates:
+            if style_path and os.path.exists(style_path):
+                with open(style_path, "r", encoding="utf-8") as f:
+                    self.setStyleSheet(f.read())
+                print(f"✓ Loaded stylesheet from: {style_path}")
+                return
+
+        print(f"Warning: styles.qss not found in any expected location")
+
+    def init_single_instance(self):
+        """Setup single instance enforcement"""
+        self.local_server = QLocalServer()
+        self.local_server.newConnection.connect(self.handle_new_connection)
+        
+        # Unique identifier for the application
+        server_name = "lazy_app_single_instance_lock"
+        
+        # Try to remove any standardized server if it exists (e.g. from a crash)
+        QLocalServer.removeServer(server_name)
+        
+        if not self.local_server.listen(server_name):
+            # If listen fails, we might just continue or log error
+            # But the check happens in main()
+            logger.error(f"Failed to start local server: {self.local_server.errorString()}")
+
+    def handle_new_connection(self):
+        """Handle incoming connection from a new instance"""
+        socket = self.local_server.nextPendingConnection()
+        if socket.waitForReadyRead(1000):
+            message = socket.readAll().data().decode('utf-8')
+            if message == "SHOW_WINDOW":
+                logger.info("Received SHOW_WINDOW command from another instance")
+                self.show_window()
+                # Also ensure we unminimize if needed
+                self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+                self.activateWindow()
+                self.raise_()
+        socket.disconnectFromServer()
 
 if __name__ == "__main__":
+    # CHECK FOR EXISTING INSTANCE
+    app_id = "lazy_app_single_instance_lock"
+    socket = QLocalSocket()
+    socket.connectToServer(app_id)
+    if socket.waitForConnected(500):
+        # Successfully connected to existing instance
+        print("Another instance is already running. Focusing existing window...")
+        socket.write(b"SHOW_WINDOW")
+        socket.waitForBytesWritten(1000)
+        socket.disconnectFromServer()
+        sys.exit(0)
+    
+    # Needs to be called before QApplication
     # Stabilization flags (RE-ENABLED TO FIX DISTORTION)
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu-compositing --disable-gpu-rasterization"
 
@@ -302,13 +584,33 @@ if __name__ == "__main__":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
     app = QApplication(sys.argv)
-    
+
     app_dir = os.path.dirname(os.path.abspath(__file__))
-    icon_path = os.path.join(app_dir, "assets", "app_icon.ico")
-    if os.path.exists(icon_path):
-        icon = QIcon(icon_path)
-        app.setWindowIcon(icon)
+
+    # Try to set application-level icon (prefer new light mode icon)
+    icon_candidates = [
+        os.path.join(app_dir, "assets", "lazy_icon.ico"),  # New multi-res version
+        os.path.join(app_dir, "assets", "Lazy Light Mode_optimized icon.ico"),  # Original light mode
+        os.path.join(app_dir, "assets", "app_icon_square.ico"),
+        os.path.join(app_dir, "assets", "app_icon.ico"),
+        os.path.join(app_dir, "assets", "icon.png")
+    ]
+
+    for icon_path in icon_candidates:
+        if os.path.exists(icon_path):
+            icon = QIcon(icon_path)
+            if not icon.isNull():
+                app.setWindowIcon(icon)
+                print(f"Application icon set from: {icon_path}")
+                break
+
+                break
 
     window = LazyApp()
+    window.init_single_instance() # Start listening
     window.show()
-    sys.exit(app.exec())
+    logger.info("Main window shown, entering event loop")
+
+    exit_code = app.exec()
+    logger.info(f"Application exiting with code: {exit_code}")
+    sys.exit(exit_code)

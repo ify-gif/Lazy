@@ -112,27 +112,14 @@
             text-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
 
-        /* LOGO HANDLING - Invert in light mode if needed for white logos */
-        /* Assuming 'icon.png' is white/light on transparent */
         img.logo-img {
             max-height: 40vh;
             width: auto;
             max-width: 90%;
             margin-bottom: 2rem;
-            filter: drop-shadow(0 0 20px rgba(0, 0, 0, 0.5));
+            filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.3));
             transition: filter 0.3s ease;
         }
-
-        /* In Light Mode (body has NO .dark class) */
-        body:not(.dark) img.logo-img {
-            /* Invert white logo to black */
-            filter: invert(1) drop-shadow(0 0 5px rgba(0, 0, 0, 0.2));
-        }
-
-        /* If the user meant the logo has a BLACK BACKGROUND, mix-blend-mode: screen hides it in dark mode.
-           But in light mode, screen on white bg = white.
-           We'll assume transparency. If it has a black bg, invert makes it a white bg, which matches the page? 
-           Let's rely on standard transparency. */
 
         b {
             font-weight: 700;

@@ -9,96 +9,28 @@
     <style>
         :root {
             --card: #ffffff;
-            --ring: #a5b4fc;
-            --input: #737373;
             --muted: #f0f0f0;
-            --accent: #f59e0b;
             --border: #000000;
-            --radius: 1rem;
-            --chart-1: #4f46e5;
-            --chart-2: #14b8a6;
-            --chart-3: #f59e0b;
-            --chart-4: #ec4899;
-            --chart-5: #22c55e;
-            --popover: #ffffff;
             --primary: #4f46e5;
-            --sidebar: #f7f9f3;
-            --spacing: 0.25rem;
-            --font-mono: Space Mono, monospace;
             --font-sans: DM Sans, sans-serif;
-            --secondary: #14b8a6;
             --background: #f7f9f3;
-            --font-serif: DM Sans, sans-serif;
             --foreground: #000000;
-            --destructive: #ef4444;
-            --shadow-blur: 0px;
-            --shadow-color: #1a1a1a;
-            --sidebar-ring: #a5b4fc;
-            --shadow-spread: 0px;
-            --letter-spacing: normal;
-            --shadow-opacity: 0.05;
-            --sidebar-accent: #f59e0b;
-            --sidebar-border: #000000;
             --card-foreground: #000000;
-            --shadow-offset-x: 0px;
-            --shadow-offset-y: 0px;
-            --sidebar-primary: #4f46e5;
             --muted-foreground: #333333;
-            --accent-foreground: #000000;
-            --popover-foreground: #000000;
             --primary-foreground: #ffffff;
-            --sidebar-foreground: #000000;
-            --secondary-foreground: #ffffff;
-            --destructive-foreground: #ffffff;
-            --sidebar-accent-foreground: #000000;
-            --sidebar-primary-foreground: #ffffff;
         }
 
         .dark {
             --card: #1a212b;
-            --ring: #818cf8;
-            --input: #ffffff;
             --muted: #333333;
-            --accent: #fcd34d;
             --border: #545454;
-            --radius: 1rem;
-            --chart-1: #818cf8;
-            --chart-2: #2dd4bf;
-            --chart-3: #fcd34d;
-            --chart-4: #f472b6;
-            --chart-5: #4ade80;
-            --popover: #1a212b;
             --primary: #818cf8;
-            --sidebar: #000000;
-            --spacing: 0.25rem;
-            --font-mono: Space Mono, monospace;
             --font-sans: DM Sans, sans-serif;
-            --secondary: #2dd4bf;
             --background: #000000;
-            --font-serif: DM Sans, sans-serif;
             --foreground: #ffffff;
-            --destructive: #f87171;
-            --shadow-blur: 0px;
-            --shadow-color: #1a1a1a;
-            --sidebar-ring: #818cf8;
-            --shadow-spread: 0px;
-            --letter-spacing: normal;
-            --shadow-opacity: 0.05;
-            --sidebar-accent: #fcd34d;
-            --sidebar-border: #ffffff;
             --card-foreground: #ffffff;
-            --shadow-offset-x: 0px;
-            --shadow-offset-y: 0px;
-            --sidebar-primary: #818cf8;
             --muted-foreground: #cccccc;
-            --accent-foreground: #000000;
-            --popover-foreground: #ffffff;
             --primary-foreground: #000000;
-            --sidebar-foreground: #ffffff;
-            --secondary-foreground: #000000;
-            --destructive-foreground: #000000;
-            --sidebar-accent-foreground: #000000;
-            --sidebar-primary-foreground: #000000;
         }
 
         body {
@@ -106,7 +38,7 @@
             overflow: hidden;
             background-color: var(--background);
             color: var(--foreground);
-            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            font-family: var(--font-sans), 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
             opacity: 0;
             transition: opacity 0.3s ease-in-out, background-color 0.3s ease, color 0.3s ease;
         }
@@ -122,6 +54,12 @@
             background-color: var(--background);
         }
 
+        /* Fallback when Spline viewer fails to load (no internet) */
+        spline-viewer:not(:defined) {
+            background: radial-gradient(ellipse at 50% 50%, var(--primary), var(--background) 70%);
+            opacity: 0.15;
+        }
+
         #overlay {
             position: absolute;
             top: 0;
@@ -134,6 +72,8 @@
             align-items: center;
             pointer-events: none;
             z-index: 10;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         #gradient-overlay {
@@ -151,7 +91,6 @@
             text-align: center;
             color: var(--foreground);
             pointer-events: auto;
-            margin-top: 100px;
             width: 100%;
         }
 
@@ -284,10 +223,12 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            color: var(--card-foreground);
         }
 
-        .star-btn path {
-            fill: var(--card-foreground);
+        .star-btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
         }
 
         .star-btn span {
@@ -300,49 +241,49 @@
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 </head>
 
-<body>
+<body class="dark">
     <div id="gradient-overlay"></div>
     <spline-viewer url="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode"></spline-viewer>
 
     <div id="overlay">
-        <div
-            style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; width: 100%; z-index: 20; padding: 20px; box-sizing: border-box;">
+        <img src="icon.png" alt="LAZY - Logic Augmentation and Zero-gap Yield application logo" class="logo-img">
 
-            <img src="icon.png" alt="LAZY Logo" class="logo-img">
+        <div class="content" id="main-content">
+            <h1>Logic Augmentation & Zero-gap Yield</h1>
+            <p>A unified intelligence suite for capturing complex requirements and tracking the project lifecycle.
+            </p>
 
-            <div class="content" id="main-content">
-                <h1>Logic Augmentation & Zero-gap Yield</h1>
-                <p>A unified intelligence suite for capturing complex requirements and tracking the project lifecycle.
-                </p>
+            <div class="btn-container">
+                <button class="star-btn" onclick="navigate(1)">
+                    <div class="light-trail" aria-hidden="true"></div>
+                    <div class="bg-mask" aria-hidden="true">
+                        <svg viewBox="0 0 138.6 46.2" preserveAspectRatio="none">
+                            <use href="#star-dots" />
+                        </svg>
+                    </div>
+                    <span>Meeting Transcription</span>
+                </button>
 
-                <div class="btn-container">
-                    <button class="star-btn" onclick="navigate(1)">
-                        <div class="light-trail"></div>
-                        <div class="bg-mask">
-                            <svg viewBox="0 0 138.6 46.2" preserveAspectRatio="none">
-                                <path fill-rule="evenodd" clip-rule="evenodd"
-                                    d="M31.68 26.02c-.3645 0-.66.2952-.66.66s.2955.66.66.66.66-.2952.66-.66-.2955-.66-.66-.66zm24.42-22.06c.3645 0 .66.29519.66.66s-.2955.66-.66.66c-.1869 0-.3557-.07799-.476-.20238-.0608-.06316-.1093-.13858-.1411-.22172-.0277-.07347-.0429-.15275-.0429-.2359 0-.0651.0094-.12826.0268-.18756.0238-.08056.0624-.15469.1127-.21915.1209-.15403.309-.25329.5205-.25329zm-15.84 13.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm34.32-11.88c.1901 0 .3613.08057.4818.20882.0112.01161.0219.02386.0322.03675.0148.01869.0291.03802.0419.058.012.01934.0236.03996.0352.06225.0116.02128.0219.04319.0311.06575.032.07734.0494.16178.0494.25072 0 .2185-.1064.4125-.2701.53238-.0541.03996-.1144.07155-.1791.09346-.0661.02191-.137.03416-.2108.03416-.3644 0-.66-.29519-.66-.66 0-.06316.009-.1244.0255-.1824.0141-.04898.0335-.09539.0577-.13857.0625-.11215.1563-.20432.2696-.26362.0919-.04834.1963-.07541.3072-.07541zm-52.92 28.24c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM7.5 32.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm0-9.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm11.16-5.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-13-.64c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm29.5 23.66c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm18.34.68c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-5-7.52c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM60.34 27.34c.3705 0 .6705.3.6705.6705s-.3.6705-.6705.6705-.6705-.3-.6705-.6705.3-.6705.6705-.6705zm-4.056-10.84c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-10.084-9.24c.3645 0 .66.2952.66.66 0 .36481-.2955.66-.66.66s-.2955-.66-.66-.66-.66-.29519-.66-.66c0-.36481.2955-.66.66-.66zm-13.2 2.08c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM16 4.8559c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm53.66 16.3c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm10.86-5.98c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM77.5 34.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm8.16-10.5c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm5.66-14.34c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm47.28-10H0V46.2h138.6V0zm-45.96 34.84c0-.3648.66-.66.66-.66s.66.2952.66.66-.2955.66-.66.66-.66-.2952-.66-.66z"
-                                    fill="#000" />
-                            </svg>
-                        </div>
-                        <span>Meeting Transcription</span>
-                    </button>
-
-                    <button class="star-btn btn-reverse" onclick="navigate(2)">
-                        <div class="light-trail"></div>
-                        <div class="bg-mask">
-                            <svg viewBox="0 0 138.6 46.2" preserveAspectRatio="none">
-                                <path fill-rule="evenodd" clip-rule="evenodd"
-                                    d="M31.68 26.02c-.3645 0-.66.2952-.66.66s.2955.66.66.66.66-.2952.66-.66-.2955-.66-.66-.66zm24.42-22.06c.3645 0 .66.29519.66.66s-.2955.66-.66.66c-.1869 0-.3557-.07799-.476-.20238-.0608-.06316-.1093-.13858-.1411-.22172-.0277-.07347-.0429-.15275-.0429-.2359 0-.0651.0094-.12826.0268-.18756.0238-.08056.0624-.15469.1127-.21915.1209-.15403.309-.25329.5205-.25329zm-15.84 13.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm34.32-11.88c.1901 0 .3613.08057.4818.20882.0112.01161.0219.02386.0322.03675.0148.01869.0291.03802.0419.058.012.01934.0236.03996.0352.06225.0116.02128.0219.04319.0311.06575.032.07734.0494.16178.0494.25072 0 .2185-.1064.4125-.2701.53238-.0541.03996-.1144.07155-.1791.09346-.0661.02191-.137.03416-.2108.03416-.3644 0-.66-.29519-.66-.66 0-.06316.009-.1244.0255-.1824.0141-.04898.0335-.09539.0577-.13857.0625-.11215.1563-.20432.2696-.26362.0919-.04834.1963-.07541.3072-.07541zm-52.92 28.24c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM7.5 32.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm0-9.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm11.16-5.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-13-.64c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm29.5 23.66c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm18.34.68c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-5-7.52c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM60.34 27.34c.3705 0 .6705.3.6705.6705s-.3.6705-.6705.6705-.6705-.3-.6705-.6705.3-.6705.6705-.6705zm-4.056-10.84c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-10.084-9.24c.3645 0 .66.2952.66.66 0 .36481-.2955.66-.66.66s-.2955-.66-.66-.66-.66-.29519-.66-.66c0-.36481.2955-.66.66-.66zm-13.2 2.08c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM16 4.8559c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm53.66 16.3c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm10.86-5.98c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM77.5 34.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm8.16-10.5c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm5.66-14.34c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm47.28-10H0V46.2h138.6V0zm-45.96 34.84c0-.3648.66-.66.66-.66s.66.2952.66.66-.2955.66-.66.66-.66-.2952-.66-.66z"
-                                    fill="#000" />
-                            </svg>
-                        </div>
-                        <span>Work Tracker</span>
-                    </button>
-                </div>
+                <button class="star-btn btn-reverse" onclick="navigate(2)">
+                    <div class="light-trail" aria-hidden="true"></div>
+                    <div class="bg-mask" aria-hidden="true">
+                        <svg viewBox="0 0 138.6 46.2" preserveAspectRatio="none">
+                            <use href="#star-dots" />
+                        </svg>
+                    </div>
+                    <span>Work Tracker</span>
+                </button>
             </div>
         </div>
     </div>
+
+    <!-- Shared SVG definition for button dot pattern -->
+    <svg style="position:absolute;width:0;height:0;" aria-hidden="true">
+        <defs>
+            <path id="star-dots" fill-rule="evenodd" clip-rule="evenodd" fill="currentColor"
+                d="M31.68 26.02c-.3645 0-.66.2952-.66.66s.2955.66.66.66.66-.2952.66-.66-.2955-.66-.66-.66zm24.42-22.06c.3645 0 .66.29519.66.66s-.2955.66-.66.66c-.1869 0-.3557-.07799-.476-.20238-.0608-.06316-.1093-.13858-.1411-.22172-.0277-.07347-.0429-.15275-.0429-.2359 0-.0651.0094-.12826.0268-.18756.0238-.08056.0624-.15469.1127-.21915.1209-.15403.309-.25329.5205-.25329zm-15.84 13.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm34.32-11.88c.1901 0 .3613.08057.4818.20882.0112.01161.0219.02386.0322.03675.0148.01869.0291.03802.0419.058.012.01934.0236.03996.0352.06225.0116.02128.0219.04319.0311.06575.032.07734.0494.16178.0494.25072 0 .2185-.1064.4125-.2701.53238-.0541.03996-.1144.07155-.1791.09346-.0661.02191-.137.03416-.2108.03416-.3644 0-.66-.29519-.66-.66 0-.06316.009-.1244.0255-.1824.0141-.04898.0335-.09539.0577-.13857.0625-.11215.1563-.20432.2696-.26362.0919-.04834.1963-.07541.3072-.07541zm-52.92 28.24c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM7.5 32.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm0-9.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm11.16-5.2c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-13-.64c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm29.5 23.66c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm18.34.68c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-5-7.52c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM60.34 27.34c.3705 0 .6705.3.6705.6705s-.3.6705-.6705.6705-.6705-.3-.6705-.6705.3-.6705.6705-.6705zm-4.056-10.84c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm-10.084-9.24c.3645 0 .66.2952.66.66 0 .36481-.2955.66-.66.66s-.2955-.66-.66-.66-.66-.29519-.66-.66c0-.36481.2955-.66.66-.66zm-13.2 2.08c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM16 4.8559c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm53.66 16.3c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm10.86-5.98c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zM77.5 34.18c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm8.16-10.5c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm5.66-14.34c.3645 0 .66.2952.66.66s-.2955.66-.66.66-.66-.2952-.66-.66.2955-.66.66-.66zm47.28-10H0V46.2h138.6V0zm-45.96 34.84c0-.3648.66-.66.66-.66s.66.2952.66.66-.2955.66-.66.66-.66-.2952-.66-.66z" />
+        </defs>
+    </svg>
 
     <script>
         var backend = null;
@@ -381,12 +322,12 @@
             updatePath();
         }
 
-        window.addEventListener('load', setLoaded);
+        // Show content as soon as DOM is ready, don't wait for Spline to load
+        document.addEventListener('DOMContentLoaded', setLoaded);
         window.addEventListener('resize', updatePath);
-        // Safety triggers to ensure the page shows even if 'load' is delayed
-        setTimeout(setLoaded, 100);
-        setTimeout(setLoaded, 500);
-        setTimeout(setLoaded, 1000);
+
+        // Single fallback in case DOMContentLoaded already fired
+        if (document.readyState !== 'loading') { setLoaded(); }
     </script>
 </body>
 

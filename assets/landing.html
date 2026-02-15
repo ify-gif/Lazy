@@ -108,11 +108,17 @@
             overflow: hidden;
             background-color: var(--background);
             color: var(--foreground);
-            font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+            font-family: var(--font-sans);
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: background-color 0.35s ease, color 0.35s ease;
+            transition: background-color 0.1s ease, color 0.1s ease;
+        }
+
+        /* Force dark background immediately to prevent flashes */
+        .dark body {
+            background-color: #1a1a1a;
+            color: #d9d9d9;
         }
 
         /* ── Settings gear (top-right) ── */
@@ -244,8 +250,7 @@
             <img src="logo.png" alt="LaZy Logo">
         </div>
 
-        <h1>Logic Augmentation &amp; Zero-gap Yield</h1>
-        <p>A unified intelligence suite for capturing complex requirements and tracking the project lifecycle.</p>
+
 
         <div class="btn-row">
             <button class="nav-btn" onclick="navigate(1)">

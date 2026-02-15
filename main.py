@@ -57,10 +57,26 @@ class Bridge(QObject):
         if self._open_settings:
             self._open_settings()
 
+from PyQt6.QtGui import QIcon, QDesktopServices, QAction, QFontDatabase
+# ...
 class LazyApp(QMainWindow):
     def __init__(self):
         super().__init__()
         logger.info("LazyApp initializing")
+
+        # Load Custom Fonts
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        fonts_dir = os.path.join(app_dir, "assets", "fonts")
+        if os.path.exists(fonts_dir):
+            for filename in os.listdir(fonts_dir):
+                if filename.lower().endswith(".ttf"):
+                    font_path = os.path.join(fonts_dir, filename)
+                    font_id = QFontDatabase.addApplicationFont(font_path)
+                    if font_id != -1:
+                        family = QFontDatabase.applicationFontFamilies(font_id)[0]
+                        logger.info(f"Loaded font: {family}")
+                    else:
+                        logger.warning(f"Failed to load font: {font_path}")
 
         self.setWindowTitle("LAZY - Audio Transcription & Work Tracker")
         self.setMinimumSize(1100, 750)

@@ -5,6 +5,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LaZy Landing</title>
+    <script>
+        // Immediately apply theme from URL to prevent FOUC (Flash of Unstyled Content)
+        (function () {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const theme = params.get('theme');
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    // Also set body class just in case specific selectors use it
+                    document.addEventListener('DOMContentLoaded', () => {
+                        document.body.classList.add('dark');
+                    });
+                }
+            } catch (e) {
+                console.error("Theme init error:", e);
+            }
+        })();
+    </script>
     <style>
         @font-face {
             font-family: 'Fira Sans Condensed';
@@ -280,9 +298,9 @@
 
         function setTheme(theme) {
             if (theme === 'dark') {
-                document.body.classList.add('dark');
+                document.documentElement.classList.add('dark');
             } else {
-                document.body.classList.remove('dark');
+                document.documentElement.classList.remove('dark');
             }
         }
     </script>

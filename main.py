@@ -210,7 +210,7 @@ class LazyApp(QMainWindow):
 
         # Ctrl+H to go Home
         home_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
-        home_shortcut.activated.connect(lambda: self.stack.setCurrentIndex(0))
+        home_shortcut.activated.connect(self.go_to_home)
 
         # Ctrl+1 for Meeting Mode
         meeting_shortcut = QShortcut(QKeySequence("Ctrl+1"), self)
@@ -342,6 +342,7 @@ class LazyApp(QMainWindow):
         # Update Landing Page if visible
         if hasattr(self, 'landing_view'):
             self.landing_view.page().runJavaScript(f"setTheme('{new_theme}');")
+            self._update_landing_bg(new_theme)
 
         self.api_client = self.init_api_client()
 
@@ -389,7 +390,7 @@ class LazyApp(QMainWindow):
         self.logo_btn.setObjectName("LogoIconButton")
         self.logo_btn.setFixedSize(90, 50)
         self.logo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.logo_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        self.logo_btn.clicked.connect(self.go_to_home)
         
         # Prefer .ico files for transparency if icon.png has black background
         # self.icon_path is already determined in __init__ with correct priority
@@ -469,7 +470,7 @@ class LazyApp(QMainWindow):
         # Keep the page lifecycle active even when not visible to prevent blank screen on return
         view.page().setLifecycleState(QWebEnginePage.LifecycleState.Active)
 
-        view.page().setBackgroundColor(QColor("transparent"))
+
 
         # Inject theme when loaded
         view.loadFinished.connect(self.on_landing_load_finished)
@@ -481,16 +482,38 @@ class LazyApp(QMainWindow):
 
         app_dir = os.path.dirname(os.path.abspath(__file__))
         html_path = os.path.join(app_dir, "assets", "landing.html")
-        view.setUrl(QUrl.fromLocalFile(html_path))
+        
+        # Pass theme as query parameter to prevent FOUC
+        current_theme = self.settings.get('theme', 'dark')
+        url = QUrl.fromLocalFile(html_path)
+        url.setQuery(f"theme={current_theme}")
+        view.setUrl(url)
+        
+        # Set initial background color to match theme (prevent white flash)
+        self._update_landing_bg(current_theme)
 
         # Store reference to prevent garbage collection
         self.landing_view = view
 
         return view
 
+    def _update_landing_bg(self, theme_name):
+        """Set the WebView background color to match the theme."""
+        if hasattr(self, 'landing_view'):
+            palette = ThemeManager.get_palette(theme_name)
+            bg_color = palette.get('background', '#1a1a1a')
+            self.landing_view.page().setBackgroundColor(QColor(bg_color))
+
+    def go_to_home(self):
+        """Navigate to the Landing Page (Index 0)."""
+        # Ensure we are ready to show the home page
+        self.stack.setCurrentIndex(0)
+        
     def on_landing_load_finished(self):
         current_theme = self.settings.get('theme', 'dark')
         self.landing_view.page().runJavaScript(f"setTheme('{current_theme}');")
+        # Ensure background is correct after load
+        self._update_landing_bg(current_theme)
 
     def open_settings(self):
         dialog = SettingsDialog(self.settings, self.save_settings, self.audio_engine, self)
@@ -502,12 +525,9 @@ class LazyApp(QMainWindow):
 
         # Optimize landing page lifecycle to save resources when not visible
         if hasattr(self, 'landing_view'):
-            if is_landing:
-                # Activate when visible
-                self.landing_view.page().setLifecycleState(QWebEnginePage.LifecycleState.Active)
-            else:
-                # Freeze (preserve state but reduce CPU/GPU usage) when hidden
-                self.landing_view.page().setLifecycleState(QWebEnginePage.LifecycleState.Frozen)
+            # Keep landing page active to prevent "blank screen" / reload delay on return
+            # self.landing_view.page().setLifecycleState(QWebEnginePage.LifecycleState.Active)
+            pass
 
         if is_landing:
             QTimer.singleShot(50, self._hide_header_footer)

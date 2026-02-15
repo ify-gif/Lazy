@@ -75,6 +75,8 @@ DARK_THEME = {
     "sidebar_ring": "#a0a0a0",
 }
 
+from PyQt6.QtGui import QPalette, QColor
+
 class ThemeManager:
     @staticmethod
     def apply_theme(app, theme_name="dark"):
@@ -83,9 +85,27 @@ class ThemeManager:
         theme_name: 'light' or 'dark'
         """
         if theme_name == "light":
-            palette = LIGHT_THEME
+            palette_config = LIGHT_THEME
         else:
-            palette = DARK_THEME
+            palette_config = DARK_THEME
+
+        # Apply QPalette to ensure standard window background matches theme (prevents white flash)
+        palette = QPalette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(palette_config["background"]))
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(palette_config["foreground"]))
+        palette.setColor(QPalette.ColorRole.Base, QColor(palette_config["input_bg"]))
+        palette.setColor(QPalette.ColorRole.AlternateBase, QColor(palette_config["card"]))
+        palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(palette_config["popover"]))
+        palette.setColor(QPalette.ColorRole.ToolTipText, QColor(palette_config["popover_foreground"]))
+        palette.setColor(QPalette.ColorRole.Text, QColor(palette_config["foreground"]))
+        palette.setColor(QPalette.ColorRole.Button, QColor(palette_config["card"]))
+        palette.setColor(QPalette.ColorRole.ButtonText, QColor(palette_config["card_foreground"]))
+        palette.setColor(QPalette.ColorRole.BrightText, QColor(palette_config["destructive_foreground"]))
+        palette.setColor(QPalette.ColorRole.Link, QColor(palette_config["primary"]))
+        palette.setColor(QPalette.ColorRole.Highlight, QColor(palette_config["primary"]))
+        palette.setColor(QPalette.ColorRole.HighlightedText, QColor(palette_config["primary_foreground"]))
+        
+        app.setPalette(palette)
 
         # Load styles.qss
         try:
@@ -113,7 +133,7 @@ class ThemeManager:
                 return False
                 
             # Perform replacement
-            for key, value in palette.items():
+            for key, value in palette_config.items():
                 stylesheet = stylesheet.replace(f"{{{{ {key} }}}}", str(value))
                 
             app.setStyleSheet(stylesheet)

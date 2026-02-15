@@ -6,7 +6,7 @@
 !define APP_VERSION "1.2.5"
 !define APP_PUBLISHER "LAZY Team"
 !define APP_EXE "LAZY.exe"
-!define APP_ICON "assets\lazy_icon.ico"
+!define APP_ICON "assets\app_icon_new.ico"
 !define INSTALL_DIR_NAME "LAZY"
 
 ; Modern UI

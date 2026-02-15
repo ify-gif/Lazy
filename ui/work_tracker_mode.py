@@ -1,6 +1,8 @@
 import sys
+import os
 from datetime import datetime
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextEdit, QFrame, QLineEdit,
                              QListWidget, QListWidgetItem, QDialog)
@@ -26,7 +28,7 @@ class CommentItemWidget(QWidget):
         # Preview label (Very truncated to fit UI)
         preview = text[:20] + "..." if len(text) > 20 else text
         self.label = QLabel(preview)
-        self.label.setStyleSheet("color: #e4e4e7; font-size: 11px;")
+        self.label.setStyleSheet("font-size: 11px;")
         layout.addWidget(self.label)
         
         # Spacer to push buttons to the right
@@ -39,14 +41,14 @@ class CommentItemWidget(QWidget):
         self.view_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
-                color: #3b82f6;
+                color: #4f46e5;
                 border: none;
                 font-size: 10px;
                 text-decoration: underline;
                 padding: 0;
             }
             QPushButton:hover {
-                color: #60a5fa;
+                color: #818cf8;
             }
         """)
         self.view_btn.clicked.connect(lambda: self.view_clicked.emit(self.index))
@@ -82,12 +84,7 @@ class CommentViewDialog(QDialog):
         if sys.platform == 'win32':
             set_native_grey_theme(int(self.winId()))
 
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #09090b;
-                border: 1px solid #27272a;
-            }
-        """)
+        # bg/border inherited from global #CentralWidget, QDialog rule
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -95,17 +92,7 @@ class CommentViewDialog(QDialog):
         self.text_area = QTextEdit()
         self.text_area.setPlainText(text)
         self.text_area.setReadOnly(True)
-        self.text_area.setStyleSheet("""
-            QTextEdit {
-                background-color: #18181b;
-                color: #e4e4e7;
-                border: 1px solid #27272a;
-                border-radius: 8px;
-                padding: 15px;
-                font-size: 14px;
-                line-height: 1.5;
-            }
-        """)
+        self.text_area.setStyleSheet("padding: 15px; font-size: 14px;")
         layout.addWidget(self.text_area)
 
 
@@ -139,43 +126,32 @@ class WorkTrackerMode(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        # Main Layout: Horizonal to split Left Sidebar vs Right Workbench
-        self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(20, 20, 20, 20)
+        # Root Layout (Vertical) to allow Header + Content Columns
+        self.root_layout = QVBoxLayout(self)
+        self.root_layout.setContentsMargins(20, 20, 20, 20)
+        self.root_layout.setSpacing(15)
+
+        # --- CONTENT COLUMNS (Horizontal) ---
+        self.main_layout = QHBoxLayout()
         self.main_layout.setSpacing(20)
+        self.root_layout.addLayout(self.main_layout, 1) # Give all remaining space
         
         # --- LEFT COLUMN (History Sidebar) ---
         self.history_frame = QFrame()
         self.history_frame.setObjectName("SidebarContainer")
         self.history_frame.setFixedWidth(280)
-        self.history_frame.setStyleSheet("""
-            #SidebarContainer {
-                background-color: #09090b;
-                border: 1px solid #27272a;
-                border-radius: 8px;
-            }
-        """)
+        # styled by global #SidebarContainer rule
         hist_layout = QVBoxLayout(self.history_frame)
         hist_layout.setContentsMargins(15, 12, 15, 15)
         
         hist_label = QLabel("Saved Stories")
-        hist_label.setStyleSheet("color: #a1a1aa; font-size: 11px; letter-spacing: 0.5px; margin-bottom: 5px;")
+        hist_label.setStyleSheet("font-size: 11px; letter-spacing: 0.5px; margin-bottom: 5px; color: #737373;")
         hist_layout.addWidget(hist_label)
         
         # Search Sub-bar
         self.hist_search = QLineEdit()
         self.hist_search.setPlaceholderText("Search stories...")
-        self.hist_search.setStyleSheet("""
-            QLineEdit {
-                background-color: #18181b;
-                color: #e4e4e7;
-                border: 1px solid #27272a;
-                border-radius: 4px;
-                padding: 6px 10px;
-                font-size: 12px;
-                margin-bottom: 10px;
-            }
-        """)
+        self.hist_search.setStyleSheet("font-size: 12px; margin-bottom: 10px;")
         self.hist_search.textChanged.connect(self.filter_history)
         hist_layout.addWidget(self.hist_search)
         
@@ -187,20 +163,17 @@ class WorkTrackerMode(QWidget):
                 outline: none;
             }
             QListWidget::item {
-                background-color: #18181b;
-                border: 1px solid #27272a;
+                border: 1px solid #545454;
                 border-radius: 6px;
                 padding: 0px;
                 margin-bottom: 8px;
-                color: #e4e4e7;
             }
             QListWidget::item:selected {
-                background-color: #27272a;
-                border: 1px solid #3b82f6;
-                color: #ffffff;
+                border-color: #4f46e5;
+                background-color: #f0f0f0;
             }
             QListWidget::item:hover {
-                background-color: #1c1c1f;
+                background-color: #f0f0f0;
             }
         """)
         self.hist_list.itemClicked.connect(self.load_selected_story)
@@ -215,20 +188,14 @@ class WorkTrackerMode(QWidget):
         # 1. Transcript Container
         self.transcript_frame = QFrame()
         self.transcript_frame.setObjectName("WorkbenchContainer")
-        self.transcript_frame.setStyleSheet("""
-            #WorkbenchContainer {
-                background-color: #09090b;
-                border: 1px solid #27272a;
-                border-radius: 8px;
-            }
-        """)
+        # styled by global #WorkbenchContainer rule
         trans_layout = QVBoxLayout(self.transcript_frame)
         trans_layout.setContentsMargins(15, 12, 15, 15)
         
         # Header Row
         trans_header = QHBoxLayout()
         trans_label = QLabel("Transcript")
-        trans_label.setStyleSheet("color: #a1a1aa; font-size: 11px; letter-spacing: 0.5px;")
+        trans_label.setStyleSheet("font-size: 11px; letter-spacing: 0.5px; color: #737373;")
         trans_header.addWidget(trans_label)
         
         trans_header.addStretch()
@@ -239,14 +206,14 @@ class WorkTrackerMode(QWidget):
         self.clear_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
-                color: #10b981;
+                color: #14b8a6;
                 border: none;
                 font-size: 10px;
                 text-decoration: underline;
                 font-weight: normal;
             }
             QPushButton:hover {
-                color: #34d399;
+                color: #2dd4bf;
             }
         """)
         self.clear_btn.clicked.connect(self.clear_session)
@@ -255,24 +222,14 @@ class WorkTrackerMode(QWidget):
         trans_header.addStretch()
         
         self.stats_label = QLabel("0 words • 0 chars")
-        self.stats_label.setStyleSheet("color: #71717a; font-size: 11px;")
+        self.stats_label.setStyleSheet("color: #737373; font-size: 11px;")
         trans_header.addWidget(self.stats_label)
         trans_layout.addLayout(trans_header)
         
         # Input Area
         self.overview_input = QTextEdit()
         self.overview_input.setPlaceholderText("Your transcript will appear here...")
-        self.overview_input.setStyleSheet("""
-            QTextEdit {
-                background-color: #18181b;
-                color: #e4e4e7;
-                border: 1px solid #27272a;
-                border-radius: 6px;
-                padding: 10px;
-                font-size: 13px;
-                line-height: 1.4;
-            }
-        """)
+        self.overview_input.setStyleSheet("padding: 10px; font-size: 13px;")
         self.overview_input.textChanged.connect(self.update_stats)
         trans_layout.addWidget(self.overview_input)
         
@@ -283,36 +240,12 @@ class WorkTrackerMode(QWidget):
         self.start_btn = QPushButton("Start")
         self.start_btn.setFixedSize(100, 32)
         self.start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.start_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: 1px solid #a1a1aa;
-                border-radius: 4px;
-                color: #f4f4f5;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #27272a;
-            }
-        """)
         self.start_btn.clicked.connect(self.start_recording)
         controls_bar.addWidget(self.start_btn)
         
         self.pause_btn = QPushButton("Pause")
         self.pause_btn.setFixedSize(100, 32)
         self.pause_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.pause_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: 1px solid #a1a1aa;
-                border-radius: 4px;
-                color: #f4f4f5;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #27272a;
-            }
-        """)
         self.pause_btn.clicked.connect(self.pause_recording)
         self.pause_btn.hide()
         controls_bar.addWidget(self.pause_btn)
@@ -320,18 +253,7 @@ class WorkTrackerMode(QWidget):
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setFixedSize(100, 32)
         self.stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.stop_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: 1px solid #ef4444;
-                border-radius: 4px;
-                color: #ef4444;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: rgba(239, 68, 68, 0.1);
-            }
-        """)
+        self.stop_btn.setObjectName("RecordingButton")
         self.stop_btn.clicked.connect(self.stop_recording)
         self.stop_btn.hide()
         controls_bar.addWidget(self.stop_btn)
@@ -344,7 +266,7 @@ class WorkTrackerMode(QWidget):
         controls_bar.addWidget(self.waveform)
 
         self.timer_label = QLabel("00:00")
-        self.timer_label.setStyleSheet("color: #71717a; font-family: 'Consolas', monospace; font-size: 12px; font-weight: bold;")
+        self.timer_label.setStyleSheet("color: #737373; font-family: 'Space Mono', monospace; font-size: 12px; font-weight: bold;")
         self.timer_label.hide()
         controls_bar.addWidget(self.timer_label)
         
@@ -356,21 +278,10 @@ class WorkTrackerMode(QWidget):
         self.generate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.generate_btn.setEnabled(False)
         self.generate_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #18181b;
-                color: #e4e4e7;
-                border: 1px solid #a1a1aa;
-                border-radius: 6px;
-                font-size: 13px;
-                margin-top: 5px;
-            }
-            QPushButton:hover {
-                background-color: #27272a;
-                border-color: #52525b;
-            }
             QPushButton:disabled {
-                color: #52525b;
-                border-color: #27272a;
+                color: #737373;
+                border-color: #545454;
+                background-color: transparent;
             }
         """)
         self.generate_btn.clicked.connect(self.generate_story)
@@ -382,22 +293,10 @@ class WorkTrackerMode(QWidget):
         self.add_comment_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_comment_btn.setEnabled(False) # Only enable when story loaded
         self.add_comment_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #a1a1aa;
-                border: 1px solid #3f3f46;
-                border-radius: 6px;
-                font-size: 13px;
-                margin-top: 5px;
-            }
-            QPushButton:hover {
-                background-color: #27272a;
-                color: #e4e4e7;
-                border-color: #52525b;
-            }
             QPushButton:disabled {
-                color: #3f3f46;
-                border-color: #27272a;
+                color: #737373;
+                border-color: #545454;
+                background-color: transparent;
             }
         """)
         self.add_comment_btn.clicked.connect(self.enter_comment_mode)
@@ -408,19 +307,13 @@ class WorkTrackerMode(QWidget):
         # 2. AI Summary Container
         self.summary_frame = QFrame()
         self.summary_frame.setObjectName("WorkbenchContainer")
-        self.summary_frame.setStyleSheet("""
-            #WorkbenchContainer {
-                background-color: #09090b;
-                border: 1px solid #27272a;
-                border-radius: 8px;
-            }
-        """)
+        # styled by global #WorkbenchContainer rule
         summ_layout = QVBoxLayout(self.summary_frame)
         summ_layout.setContentsMargins(15, 12, 15, 15)
         
         summ_header = QHBoxLayout()
         summ_label_title = QLabel("AI Summary")
-        summ_label_title.setStyleSheet("color: #a1a1aa; font-size: 11px; letter-spacing: 0.5px;")
+        summ_label_title.setStyleSheet("font-size: 11px; letter-spacing: 0.5px; color: #737373;")
         summ_header.addWidget(summ_label_title)
         
         summ_header.addStretch()
@@ -430,17 +323,16 @@ class WorkTrackerMode(QWidget):
         copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         copy_btn.setStyleSheet("""
             QPushButton {
-                background-color: #27272a;
-                border: 1px solid #a1a1aa;
+                background-color: transparent;
+                border: 1px solid #4f46e5;
                 border-radius: 4px;
-                color: #ffffff;
+                color: #4f46e5;
                 font-size: 11px;
                 font-weight: 600;
                 padding: 0px 5px;
             }
             QPushButton:hover {
-                background-color: #3f3f46;
-                border-color: #52525b;
+                background-color: rgba(79, 70, 229, 0.1);
             }
         """)
         copy_btn.clicked.connect(self.copy_summary)
@@ -449,17 +341,7 @@ class WorkTrackerMode(QWidget):
         
         self.ai_summary_output = QTextEdit()
         self.ai_summary_output.setPlaceholderText("Professional summary will appear here...")
-        self.ai_summary_output.setStyleSheet("""
-            QTextEdit {
-                background-color: #18181b;
-                color: #e4e4e7;
-                border: 1px solid #27272a;
-                border-radius: 6px;
-                padding: 10px;
-                font-size: 13px;
-                line-height: 1.4;
-            }
-        """)
+        self.ai_summary_output.setStyleSheet("padding: 10px; font-size: 13px;")
         summ_layout.addWidget(self.ai_summary_output)
         
         center_column.addWidget(self.summary_frame, 3) # weight 3 (more space for summary)
@@ -471,41 +353,13 @@ class WorkTrackerMode(QWidget):
         self.save_btn = QPushButton("Save Story")
         self.save_btn.setFixedHeight(45)
         self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #18181b;
-                color: #e4e4e7;
-                border: 1px solid #a1a1aa;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #27272a;
-                border-color: #52525b;
-            }
-        """)
+        self.save_btn.setObjectName("PrimaryButton")
         self.save_btn.clicked.connect(self.handle_save_action)
         footer_layout.addWidget(self.save_btn, 3) # wide
 
         self.export_btn = QPushButton("Export to File")
         self.export_btn.setFixedHeight(45)
         self.export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.export_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #18181b;
-                color: #a1a1aa;
-                border: 1px solid #27272a;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #27272a;
-                border-color: #52525b;
-                color: #e4e4e7;
-            }
-        """)
         self.export_btn.clicked.connect(self.export_story_to_file)
         footer_layout.addWidget(self.export_btn, 1) # narrower
 
@@ -517,18 +371,12 @@ class WorkTrackerMode(QWidget):
         self.comments_frame = QFrame()
         self.comments_frame.setObjectName("SidebarContainer")
         self.comments_frame.setFixedWidth(280)
-        self.comments_frame.setStyleSheet("""
-            #SidebarContainer {
-                background-color: #09090b;
-                border: 1px solid #27272a;
-                border-radius: 8px;
-            }
-        """)
+        # styled by global #SidebarContainer rule
         comm_layout = QVBoxLayout(self.comments_frame)
         comm_layout.setContentsMargins(15, 12, 15, 15)
         
         comm_label = QLabel("Story Comments")
-        comm_label.setStyleSheet("color: #a1a1aa; font-size: 11px; letter-spacing: 0.5px; margin-bottom: 5px;")
+        comm_label.setStyleSheet("font-size: 11px; letter-spacing: 0.5px; margin-bottom: 5px; color: #737373;")
         comm_layout.addWidget(comm_label)
         
         self.comm_list = QListWidget()
@@ -539,12 +387,10 @@ class WorkTrackerMode(QWidget):
                 outline: none;
             }
             QListWidget::item {
-                background-color: #18181b;
-                border: 1px solid #27272a;
+                border: 1px solid #545454;
                 border-radius: 6px;
                 padding: 10px;
                 margin-bottom: 8px;
-                color: #e4e4e7;
             }
         """)
         comm_layout.addWidget(self.comm_list)
@@ -806,7 +652,7 @@ class WorkTrackerMode(QWidget):
                 # Title and Date row
                 top_row = QHBoxLayout()
                 title_lbl = QLabel(title)
-                title_lbl.setStyleSheet("color: #e4e4e7; font-size: 13px; font-weight: 500;")
+                title_lbl.setStyleSheet("font-size: 13px; font-weight: 500;")
                 title_lbl.setWordWrap(False)
                 top_row.addWidget(title_lbl)
                 top_row.addStretch()
@@ -815,7 +661,7 @@ class WorkTrackerMode(QWidget):
                 # Action row
                 bottom_row = QHBoxLayout()
                 date_lbl = QLabel(date)
-                date_lbl.setStyleSheet("color: #71717a; font-size: 11px;")
+                date_lbl.setStyleSheet("color: #737373; font-size: 11px;")
                 bottom_row.addWidget(date_lbl)
                 bottom_row.addStretch()
                 
@@ -824,11 +670,14 @@ class WorkTrackerMode(QWidget):
                 del_btn.setStyleSheet("""
                     QPushButton {
                         color: #ef4444;
-                        background-color: transparent;
+                        background: transparent;
                         border: none;
                         font-size: 11px;
                         text-decoration: underline;
                         padding: 0;
+                    }
+                    QPushButton:hover {
+                        color: #f87171;
                     }
                 """)
                 del_btn.clicked.connect(lambda checked, i=item: self.delete_story(i))

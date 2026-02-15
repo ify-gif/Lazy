@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List, Dict
 
 class DatabaseManager:
-    ALLOWED_TABLES = {'transcripts', 'work_stories'}
+    ALLOWED_TABLES = {'transcripts', 'work_stories', 'pending_recordings'}
 
     def __init__(self, db_name: str = "lazy_data.db"):
         self.db_path = os.path.join(os.path.expanduser("~"), db_name)
@@ -71,6 +71,26 @@ class DatabaseManager:
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_work_stories_title
                 ON work_stories(title COLLATE NOCASE)
+            ''')
+
+            # Pending Recordings Table (Offline Queue)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS pending_recordings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    audio_path TEXT NOT NULL,
+                    mode TEXT NOT NULL,  -- 'meeting' or 'work_tracker'
+                    status TEXT DEFAULT 'pending',  -- pending, processing, failed, completed
+                    retry_count INTEGER DEFAULT 0,
+                    error_message TEXT,
+                    result_id INTEGER,  -- ID in transcripts or work_stories after processing
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    processed_at TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_pending_status
+                ON pending_recordings(status, created_at ASC)
             ''')
 
             conn.commit()
@@ -146,4 +166,90 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f'DELETE FROM {table} WHERE id = ?', (item_id,))
+            conn.commit()
+
+    # ==================== Offline Queue Methods ====================
+    
+    def queue_recording(self, audio_path: str, mode: str) -> int:
+        """Add a recording to the offline queue for later processing.
+        
+        Args:
+            audio_path: Path to the saved audio file
+            mode: Either 'meeting' or 'work_tracker'
+            
+        Returns:
+            The ID of the queued recording
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO pending_recordings (audio_path, mode, status)
+                VALUES (?, ?, 'pending')
+            ''', (audio_path, mode))
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_pending_recordings(self, limit: int = 10) -> List[Dict]:
+        """Get recordings that are pending processing, oldest first."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM pending_recordings 
+                WHERE status IN ('pending', 'failed')
+                AND retry_count < 3
+                ORDER BY created_at ASC
+                LIMIT ?
+            ''', (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def update_recording_status(self, recording_id: int, status: str, 
+                                 error_message: str = None, result_id: int = None):
+        """Update the status of a queued recording.
+        
+        Args:
+            recording_id: ID of the pending recording
+            status: New status ('processing', 'completed', 'failed')
+            error_message: Error message if failed
+            result_id: ID in the result table if completed
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if status == 'failed':
+                cursor.execute('''
+                    UPDATE pending_recordings 
+                    SET status = ?, error_message = ?, retry_count = retry_count + 1
+                    WHERE id = ?
+                ''', (status, error_message, recording_id))
+            elif status == 'completed':
+                cursor.execute('''
+                    UPDATE pending_recordings 
+                    SET status = ?, result_id = ?, processed_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (status, result_id, recording_id))
+            else:
+                cursor.execute('''
+                    UPDATE pending_recordings SET status = ? WHERE id = ?
+                ''', (status, recording_id))
+            conn.commit()
+
+    def get_pending_count(self) -> int:
+        """Get count of recordings waiting to be processed."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) FROM pending_recordings 
+                WHERE status IN ('pending', 'failed') AND retry_count < 3
+            ''')
+            return cursor.fetchone()[0]
+
+    def cleanup_completed_recordings(self, days_old: int = 7):
+        """Remove completed recordings older than specified days."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                DELETE FROM pending_recordings 
+                WHERE status = 'completed' 
+                AND processed_at < datetime('now', ?)
+            ''', (f'-{days_old} days',))
             conn.commit()

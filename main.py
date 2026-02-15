@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QStackedWidget,
                              QFrame, QSystemTrayIcon, QMenu)
 from PyQt6.QtCore import Qt, QSize, QTimer, QUrl, QObject, pyqtSlot, QIODevice
-from PyQt6.QtGui import QColor, QIcon, QAction
+from PyQt6.QtGui import QColor, QIcon, QAction, QShortcut, QKeySequence
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
@@ -39,16 +39,23 @@ from ui.work_tracker_mode import WorkTrackerMode
 from ui.settings_dialog import SettingsDialog
 from ui.theme_manager import ThemeManager
 from ui.utils import set_native_grey_theme, set_window_icon_windows, PulsatingIcon, CheatSheetPopover
+from offline_queue import OfflineQueue
 
 
 class Bridge(QObject):
-    def __init__(self, stack):
+    def __init__(self, stack, open_settings_cb=None):
         super().__init__()
         self.stack = stack
+        self._open_settings = open_settings_cb
 
     @pyqtSlot(int)
     def navigate(self, index):
         self.stack.setCurrentIndex(index)
+
+    @pyqtSlot()
+    def openSettings(self):
+        if self._open_settings:
+            self._open_settings()
 
 class LazyApp(QMainWindow):
     def __init__(self):
@@ -63,8 +70,8 @@ class LazyApp(QMainWindow):
 
         # Try new light mode icon first, then fallbacks
         icon_candidates = [
+            os.path.join(app_dir, "assets", "app_icon_new.ico"), # High res distinct icon
             os.path.join(app_dir, "assets", "lazy_icon.ico"),  # New multi-res version
-            os.path.join(app_dir, "assets", "Lazy Light Mode_optimized icon.ico"),  # Original light mode
             os.path.join(app_dir, "assets", "app_icon_square.ico"),
             os.path.join(app_dir, "assets", "app_icon.ico"),
             os.path.join(app_dir, "assets", "icon.png")
@@ -98,7 +105,12 @@ class LazyApp(QMainWindow):
         self.api_client = self.init_api_client()
         logger.info(f"APIClient initialized: configured={self.api_client is not None}")
 
-        self.init_ui()
+        # Initialize offline queue for background sync
+        self.offline_queue = OfflineQueue(self.db_manager, self.api_client, self)
+        pending = self.offline_queue.get_pending_count()
+        if pending > 0:
+            logger.info(f"Offline queue has {pending} pending recordings")
+
         self.init_ui()
         # Apply initial theme
         current_theme = self.settings.get('theme', 'dark')
@@ -112,6 +124,9 @@ class LazyApp(QMainWindow):
 
         # Setup system tray icon
         self.setup_system_tray()
+
+        # Setup keyboard shortcuts
+        self.setup_keyboard_shortcuts()
 
     def apply_theme(self):
         if sys.platform == 'win32':
@@ -160,6 +175,49 @@ class LazyApp(QMainWindow):
 
         # Show the tray icon
         self.tray_icon.show()
+
+    def setup_keyboard_shortcuts(self):
+        """Setup global keyboard shortcuts for the application.
+        
+        Shortcuts:
+            Ctrl+,    - Open Settings
+            Ctrl+H    - Go to Home/Landing page
+            Ctrl+1    - Switch to Meeting Mode
+            Ctrl+2    - Switch to Work Tracker Mode
+            Escape    - Go back to Home or close dialogs
+        """
+        logger.info("Setting up keyboard shortcuts")
+
+        # Ctrl+, to open Settings (common pattern in many apps)
+        settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
+        settings_shortcut.activated.connect(self.open_settings)
+
+        # Ctrl+H to go Home
+        home_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
+        home_shortcut.activated.connect(lambda: self.stack.setCurrentIndex(0))
+
+        # Ctrl+1 for Meeting Mode
+        meeting_shortcut = QShortcut(QKeySequence("Ctrl+1"), self)
+        meeting_shortcut.activated.connect(lambda: self.stack.setCurrentIndex(1))
+
+        # Ctrl+2 for Work Tracker Mode
+        tracker_shortcut = QShortcut(QKeySequence("Ctrl+2"), self)
+        tracker_shortcut.activated.connect(lambda: self.stack.setCurrentIndex(2))
+
+        # Escape to go back to Home (or close popover if open)
+        escape_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        escape_shortcut.activated.connect(self._handle_escape)
+
+        # Store references to prevent garbage collection
+        self._shortcuts = [settings_shortcut, home_shortcut, meeting_shortcut, 
+                          tracker_shortcut, escape_shortcut]
+
+    def _handle_escape(self):
+        """Handle Escape key - close popover or go to home."""
+        if hasattr(self, 'cheat_sheet') and self.cheat_sheet.isVisible():
+            self.cheat_sheet.hide()
+        elif self.stack.currentIndex() != 0:
+            self.stack.setCurrentIndex(0)
 
     def on_tray_icon_activated(self, reason):
         """Handle tray icon activation (click, double-click, etc.)"""
@@ -317,14 +375,14 @@ class LazyApp(QMainWindow):
         self.logo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.logo_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
         
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        png_logo = os.path.join(app_dir, "assets", "icon.png")
-        if os.path.exists(png_logo):
-            self.logo_btn.setIcon(QIcon(png_logo))
-            self.logo_btn.setIconSize(QSize(80, 40))
-        elif os.path.exists(self.icon_path):
-            self.logo_btn.setIcon(QIcon(self.icon_path))
-            self.logo_btn.setIconSize(QSize(80, 40))
+        # Prefer .ico files for transparency if icon.png has black background
+        # self.icon_path is already determined in __init__ with correct priority
+        if self.icon_path and os.path.exists(self.icon_path):
+             self.logo_btn.setIcon(QIcon(self.icon_path))
+             self.logo_btn.setIconSize(QSize(80, 40))
+        else:
+             # Fallback
+             pass
             
         header_layout.addWidget(self.logo_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         header_layout.addStretch()
@@ -335,13 +393,12 @@ class LazyApp(QMainWindow):
         self.settings_btn.setStyleSheet("""
             QPushButton {
                 font-size: 16px;
-                color: #e4e4e7;
                 background-color: transparent;
                 border: none;
                 padding: 0px;
             }
             QPushButton:hover {
-                color: #3b82f6;
+                color: #4f46e5;
             }
         """)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -369,7 +426,7 @@ class LazyApp(QMainWindow):
         footer_layout = QHBoxLayout(self.footer)
         self.status_icon = QFrame()
         self.status_icon.setFixedSize(8, 8)
-        self.status_icon.setStyleSheet("background: #10b981; border-radius: 4px;")
+        self.status_icon.setStyleSheet("background: #14b8a6; border-radius: 4px;")
         footer_layout.addWidget(self.status_icon)
         self.status_label = QLabel("Status")
         footer_layout.addWidget(self.status_label)
@@ -396,13 +453,12 @@ class LazyApp(QMainWindow):
         # Keep the page lifecycle active even when not visible to prevent blank screen on return
         view.page().setLifecycleState(QWebEnginePage.LifecycleState.Active)
 
-        view.setStyleSheet("background-color: black;")
-        view.page().setBackgroundColor(QColor("black"))
-        
+        view.page().setBackgroundColor(QColor("transparent"))
+
         # Inject theme when loaded
         view.loadFinished.connect(self.on_landing_load_finished)
 
-        self.bridge = Bridge(self.stack)
+        self.bridge = Bridge(self.stack, open_settings_cb=self.open_settings)
         self.channel = QWebChannel()
         self.channel.registerObject("backend", self.bridge)
         view.page().setWebChannel(self.channel)
@@ -438,7 +494,6 @@ class LazyApp(QMainWindow):
                 self.landing_view.page().setLifecycleState(QWebEnginePage.LifecycleState.Frozen)
 
         if is_landing:
-            # Delay hiding to let the Spline viewer render
             QTimer.singleShot(50, self._hide_header_footer)
             self.info_btn.hide()
         else:
@@ -487,7 +542,7 @@ class LazyApp(QMainWindow):
 
         # Turn version label into a clickable update link
         self.version_label.setText(f"Update available: v{latest}")
-        self.version_label.setStyleSheet("color: #3b82f6; font-weight: bold; text-decoration: underline; cursor: pointer;")
+        self.version_label.setStyleSheet("color: #4f46e5; font-weight: bold; text-decoration: underline; cursor: pointer;")
         self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.version_label.mousePressEvent = lambda e: self._open_update_url(self._update_url)
 
@@ -498,9 +553,9 @@ class LazyApp(QMainWindow):
 
     def show_toast(self, message, msg_type="info"):
         self.toast_label.setText(message)
-        colors = {"success": "#10b981", "error": "#ef4444", "warning": "#f59e0b", "info": "#3b82f6"}
+        colors = {"success": "#14b8a6", "error": "#ef4444", "warning": "#fcd34d", "info": "#818cf8"}
         color = colors.get(msg_type, "#3b82f6")
-        self.toast_label.setStyleSheet(f"background: #1e293b; color: white; border-radius: 20px; padding: 0 20px; border: 2px solid {color}; font-weight: bold;")
+        self.toast_label.setStyleSheet(f"background: #1a212b; color: white; border-radius: 20px; padding: 0 20px; border: 2px solid {color}; font-weight: bold;")
         self.toast_label.adjustSize()
         self.toast_label.move((self.width() - self.toast_label.width()) // 2, self.height() - 100)
         self.toast_label.show()
@@ -590,7 +645,6 @@ if __name__ == "__main__":
     # Try to set application-level icon (prefer new light mode icon)
     icon_candidates = [
         os.path.join(app_dir, "assets", "lazy_icon.ico"),  # New multi-res version
-        os.path.join(app_dir, "assets", "Lazy Light Mode_optimized icon.ico"),  # Original light mode
         os.path.join(app_dir, "assets", "app_icon_square.ico"),
         os.path.join(app_dir, "assets", "app_icon.ico"),
         os.path.join(app_dir, "assets", "icon.png")
@@ -602,8 +656,6 @@ if __name__ == "__main__":
             if not icon.isNull():
                 app.setWindowIcon(icon)
                 print(f"Application icon set from: {icon_path}")
-                break
-
                 break
 
     window = LazyApp()

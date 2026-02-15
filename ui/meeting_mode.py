@@ -1,5 +1,7 @@
 import sys
+import os
 from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextEdit, QFrame, QScrollArea,
                              QListWidget, QListWidgetItem, QDialog, QLineEdit, QApplication, QMessageBox)
@@ -37,21 +39,8 @@ class MeetingMode(QWidget):
         
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText("Meeting Title...")
-        self.title_input.setFixedWidth(400) # Reduced width
+        self.title_input.setFixedWidth(400)
         self.title_input.setFixedHeight(40)
-        self.title_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #e8e8e8;
-                border: 2px solid #3b82f6; /* Stands out (Blue) */
-                border-radius: 8px;
-                padding: 0 12px;
-                color: #000000;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border: 2px solid #2563eb;
-            }
-        """)
         toolbar.addWidget(self.title_input)
         
         # Record Button in Toolbar (Added prominent border)
@@ -60,20 +49,7 @@ class MeetingMode(QWidget):
         self.record_btn.setFixedWidth(150)
         self.record_btn.setFixedHeight(40)
         self.record_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.record_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: 1px solid #d0d0d0; /* Standing out border */
-                border-radius: 6px;
-                padding: 5px 15px;
-                color: #e4e4e7;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: rgba(59, 130, 246, 0.1);
-                border: 1px solid #3b82f6;
-            }
-        """)
+        # inherits global QPushButton style; no inline override needed
         toolbar.addWidget(self.record_btn)
 
         # Recording indicators in Toolbar
@@ -84,7 +60,7 @@ class MeetingMode(QWidget):
         toolbar.addWidget(self.recording_dot)
 
         self.timer_label = QLabel("00:00:00")
-        self.timer_label.setStyleSheet("font-family: monospace; font-weight: bold; color: #ef4444; font-size: 14px;")
+        self.timer_label.setStyleSheet("font-family: 'Space Mono', monospace; font-weight: bold; color: #ef4444; font-size: 14px;")
         self.timer_label.hide()
         toolbar.addWidget(self.timer_label)
 
@@ -97,13 +73,11 @@ class MeetingMode(QWidget):
         
         self.history_btn = QPushButton("History")
         self.history_btn.setFixedHeight(40)
-        self.history_btn.setStyleSheet("border: 1px solid #d0d0d0; padding: 0 20px;")
         self.history_btn.clicked.connect(self.show_history)
         toolbar.addWidget(self.history_btn)
 
         self.save_btn = QPushButton("Save")
         self.save_btn.setFixedHeight(40)
-        self.save_btn.setStyleSheet("border: 1px solid #d0d0d0; padding: 0 20px;")
         self.save_btn.clicked.connect(self.save_transcript)
         self.save_btn.hide()
         toolbar.addWidget(self.save_btn)
@@ -131,14 +105,14 @@ class MeetingMode(QWidget):
         self.clear_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
-                color: #10b981;
+                color: #14b8a6;
                 border: none;
                 font-size: 10px;
                 text-decoration: underline;
                 font-weight: normal;
             }
             QPushButton:hover {
-                color: #34d399;
+                color: #2dd4bf;
             }
         """)
         self.clear_btn.clicked.connect(self.clear_session)
@@ -147,7 +121,7 @@ class MeetingMode(QWidget):
         transcript_header.addStretch()
         
         self.transcript_stats = QLabel("0 words • 0 chars")
-        self.transcript_stats.setStyleSheet("color: #a1a1aa; font-size: 11px; font-weight: bold;")
+        self.transcript_stats.setStyleSheet("color: #737373; font-size: 11px; font-weight: bold;")
         transcript_header.addWidget(self.transcript_stats)
         transcript_layout.addLayout(transcript_header)
 
@@ -159,7 +133,6 @@ class MeetingMode(QWidget):
         # Actions under transcript
         actions = QHBoxLayout()
         self.summary_btn = QPushButton("Generate AI Summary")
-        self.summary_btn.setStyleSheet("border: 1px solid #d0d0d0;")
         self.summary_btn.clicked.connect(self.generate_summary)
         actions.addWidget(self.summary_btn)
         transcript_layout.addLayout(actions)
@@ -182,12 +155,12 @@ class MeetingMode(QWidget):
                 font-size: 10px;
                 padding: 3px 6px;
                 background-color: transparent;
-                border: 1px solid #d0d0d0;
+                border: 1px solid #4f46e5;
                 border-radius: 3px;
-                color: #3b82f6;
+                color: #4f46e5;
             }
             QPushButton:hover {
-                background-color: rgba(59, 130, 246, 0.1);
+                background-color: rgba(79, 70, 229, 0.1);
             }
         """)
         self.copy_summary_btn.clicked.connect(self.copy_summary_to_clipboard)
@@ -215,21 +188,8 @@ class MeetingMode(QWidget):
             self.timer.start(1000)
             self.set_status("Recording...", "#ef4444")
 
-            # Visual feedback - red button with prominent border
             self.record_btn.setText("Stop Recording")
-            self.record_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(239, 68, 68, 0.2);
-                    border: 2px solid #ef4444;
-                    border-radius: 6px;
-                    padding: 5px 15px;
-                    color: #ef4444;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: rgba(239, 68, 68, 0.3);
-                }
-            """)
+            self.record_btn.setObjectName("RecordingButton")
 
             # Pulsing dot animation
             self.pulse_timer = QTimer()
@@ -400,12 +360,7 @@ class MeetingMode(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle("Meeting History")
         dialog.setFixedSize(600, 500)
-        dialog.setStyleSheet("""
-            QDialog {
-                background-color: #000000;
-                border: 1px solid #ffffff;
-            }
-        """)
+        # bg/border inherited from global #CentralWidget, QDialog rule
         if sys.platform == 'win32':
             set_native_grey_theme(int(dialog.winId()))
             
@@ -418,7 +373,7 @@ class MeetingMode(QWidget):
         if not items:
             # Empty state
             empty_label = QLabel("📝 No meetings recorded yet\n\nStart recording to build your history")
-            empty_label.setStyleSheet("color: #64748b; font-size: 14px; padding: 40px;")
+            empty_label.setStyleSheet("color: #737373; font-size: 14px; padding: 40px;")
             empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(empty_label)
         else:
@@ -426,61 +381,41 @@ class MeetingMode(QWidget):
             search_input = QLineEdit()
             search_input.setPlaceholderText("Search meetings...")
             search_input.setFixedHeight(40)
-            search_input.setStyleSheet("""
-                QLineEdit {
-                    background-color: #e8e8e8;
-                    color: #000000;
-                    border: 1px solid #d0d0d0;
-                    padding: 0 10px;
-                    border-radius: 4px;
-                }
-                QLineEdit:focus {
-                    border: 1px solid #3b82f6;
-                }
-            """)
             layout.addWidget(search_input)
 
             # Records Container (mimicking TranscriptContainer in main app)
             records_frame = QFrame()
             records_frame.setObjectName("TranscriptContainer")
-            records_frame.setStyleSheet("""
-                #TranscriptContainer {
-                    background-color: #09090b;
-                    border: 1px solid #d0d0d0;
-                    border-radius: 12px;
-                }
-            """)
             records_layout = QVBoxLayout(records_frame)
             records_layout.setContentsMargins(15, 15, 15, 15)
             
             records_header = QLabel("Saved Meetings")
-            records_header.setStyleSheet("color: #e4e4e7; font-size: 11px; font-weight: normal; letter-spacing: 1px;")
+            records_header.setStyleSheet("font-size: 11px; font-weight: normal; letter-spacing: 1px;")
             records_layout.addWidget(records_header)
 
             list_widget = QListWidget()
             list_widget.setStyleSheet("""
                 QListWidget {
-                    background-color: #e8e8e8;
-                    color: #000000;
-                    border: 1px solid #cccccc;
-                    border-radius: 8px;
+                    background-color: transparent;
+                    border: none;
                     outline: none;
                 }
                 QListWidget::item {
                     padding: 12px;
-                    border-bottom: 1px solid #d1d1d1;
-                    color: #000000;
+                    border-bottom: 1px solid #545454;
+                    border-radius: 6px;
+                    margin-bottom: 4px;
                 }
                 QListWidget::item:last {
                     border-bottom: none;
                 }
                 QListWidget::item:hover {
-                    background-color: #c0c0c0;
+                    background-color: #f0f0f0;
                 }
                 QListWidget::item:selected {
-                    background-color: #ffffff;
-                    color: #000000;
-                    border: 1px solid #000000;
+                    background-color: #4f46e5;
+                    color: #ffffff;
+                    border-color: #4f46e5;
                 }
             """)
             records_layout.addWidget(list_widget)
@@ -515,7 +450,7 @@ class MeetingMode(QWidget):
                         row_layout.setContentsMargins(15, 0, 15, 0)
                         
                         label = QLabel(f"{title_text} ({date_text})")
-                        label.setStyleSheet("color: #000000; font-size: 13px;")
+                        label.setStyleSheet("font-size: 13px;")
                         row_layout.addWidget(label)
                         
                         row_layout.addStretch()
@@ -525,12 +460,14 @@ class MeetingMode(QWidget):
                         del_btn.setStyleSheet("""
                             QPushButton {
                                 color: #ef4444;
-                                background-color: transparent;
+                                background: transparent;
                                 border: none;
                                 font-size: 11px;
                                 text-decoration: underline;
-                                font-weight: normal;
                                 padding: 0;
+                            }
+                            QPushButton:hover {
+                                color: #f87171;
                             }
                         """)
                         del_btn.clicked.connect(lambda checked, i=item: delete_meeting(i))
@@ -547,17 +484,7 @@ class MeetingMode(QWidget):
 
             open_btn = QPushButton("Open Meeting")
             open_btn.setFixedHeight(45)
-            open_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    border: 1px solid #ffffff;
-                    border-radius: 6px;
-                    color: #ffffff;
-                }
-                QPushButton:hover {
-                    background-color: rgba(255, 255, 255, 0.1);
-                }
-            """)
+            open_btn.setObjectName("PrimaryButton")
 
             def load():
                 curr = list_widget.currentItem()
@@ -575,17 +502,6 @@ class MeetingMode(QWidget):
 
             export_btn = QPushButton("Export")
             export_btn.setFixedHeight(45)
-            export_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    border: 1px solid #ffffff;
-                    border-radius: 6px;
-                    color: #ffffff;
-                }
-                QPushButton:hover {
-                    background-color: rgba(255, 255, 255, 0.1);
-                }
-            """)
 
             def export_selected():
                 curr = list_widget.currentItem()
@@ -628,20 +544,8 @@ class MeetingMode(QWidget):
     def reset_record_btn(self):
         self.recording_active = False
         self.record_btn.setText("Start Recording")
-        self.record_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: 1px solid #d0d0d0;
-                border-radius: 6px;
-                padding: 5px 15px;
-                color: #e4e4e7;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: rgba(59, 130, 246, 0.1);
-                border: 1px solid #3b82f6;
-            }
-        """)
+        self.record_btn.setObjectName("")
+        self.record_btn.setStyleSheet("")  # clear so global QPushButton rule applies
         self.record_btn.setEnabled(True)
         self.timer_label.hide()
         self.set_status("Status", "#10b981")

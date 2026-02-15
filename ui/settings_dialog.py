@@ -2,8 +2,9 @@ import requests
 import sys
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QFormLayout, QSpinBox, QComboBox)
-from PyQt6.QtCore import Qt
-from ui.utils import set_native_grey_theme
+from PyQt6.QtCore import Qt, QTimer
+from ui.utils import set_native_grey_theme, Worker
+from logger_config import logger
 
 
 def validate_openai_key(api_key: str) -> tuple[bool, str]:
@@ -39,6 +40,10 @@ class SettingsDialog(QDialog):
         self.settings = current_settings
         self.on_save = on_save
         self.audio_engine = audio_engine
+        # Track background workers to prevent garbage collection
+        self._validation_worker = None
+        self._audio_test_active = False
+        self._recorded_audio = None
         self.init_ui()
         
         if sys.platform == 'win32':
@@ -55,11 +60,11 @@ class SettingsDialog(QDialog):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
         # Consistent label styling
-        label_style = "color: {{ foreground }}; font-weight: bold;"
+        label_style = "font-weight: bold;"  # colour inherited from global QLabel rule
 
         # --- Appearance Section ---
         appearance_label = QLabel("Appearance")
-        appearance_label.setStyleSheet("color: {{ accent }}; font-size: 14px; font-weight: bold; margin-bottom: 5px;")
+        appearance_label.setStyleSheet("color: #f59e0b; font-size: 14px; font-weight: bold; margin-bottom: 5px;")
         layout.addWidget(appearance_label)
 
         appearance_form = QFormLayout()
@@ -85,7 +90,7 @@ class SettingsDialog(QDialog):
         
         # --- API Section ---
         api_header = QLabel("API Configuration")
-        api_header.setStyleSheet("color: {{ accent }}; font-size: 14px; font-weight: bold; margin-bottom: 5px;")
+        api_header.setStyleSheet("color: #f59e0b; font-size: 14px; font-weight: bold; margin-bottom: 5px;")
         layout.addWidget(api_header)
 
         # API Key row with validate button
@@ -98,7 +103,7 @@ class SettingsDialog(QDialog):
         self.validate_btn = QPushButton("Validate")
         self.validate_btn.setFixedWidth(110)
         self.validate_btn.setFixedHeight(40)
-        self.validate_btn.setStyleSheet("border: 1px solid #d0d0d0;")
+        self.validate_btn.setStyleSheet("padding: 8px 12px;")
         self.validate_btn.clicked.connect(self.validate_key)
         key_layout.addWidget(self.validate_btn)
 
@@ -146,7 +151,8 @@ class SettingsDialog(QDialog):
         self.test_audio_btn = QPushButton("Test Audio")
         self.test_audio_btn.setFixedWidth(110)
         self.test_audio_btn.setFixedHeight(40)
-        self.test_audio_btn.setStyleSheet("border: 1px solid #d0d0d0;")
+        # Reduce padding to prevent text clipping in fixed-width button
+        self.test_audio_btn.setStyleSheet("padding: 8px 12px;")
         self.test_audio_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.test_audio_btn.clicked.connect(self.test_audio)
         device_layout.addWidget(self.test_audio_btn)
@@ -167,11 +173,10 @@ class SettingsDialog(QDialog):
         btns.setContentsMargins(0, 20, 0, 0)
         
         save_btn = QPushButton("Save")
-        save_btn.setStyleSheet("border: 1px solid #d0d0d0; padding: 8px 25px;")
+        save_btn.setObjectName("PrimaryButton")
         save_btn.clicked.connect(self.handle_save)
         
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setStyleSheet("border: 1px solid #d0d0d0; padding: 8px 25px;")
         cancel_btn.clicked.connect(self.reject)
 
         btns.addStretch()
@@ -181,21 +186,27 @@ class SettingsDialog(QDialog):
         layout.addLayout(btns)
 
     def validate_key(self):
+        """Validate API key in background thread to avoid UI blocking."""
         self.validate_btn.setEnabled(False)
         self.validate_btn.setText("⟳ Validating...")
         self.validation_label.setText("Validating...")
-        self.validation_label.setStyleSheet("color: #64748b; font-size: 11px;")
-
-        # Process events to update UI before blocking request
-        from PyQt6.QtWidgets import QApplication
-        QApplication.processEvents()
+        self.validation_label.setStyleSheet("color: #737373; font-size: 11px;")
 
         api_key = self.openai_key.text()
-        is_valid, message = validate_openai_key(api_key)
+        
+        # Run validation in background thread
+        self._validation_worker = Worker(validate_openai_key, api_key)
+        self._validation_worker.finished.connect(self._on_validation_complete)
+        self._validation_worker.error.connect(self._on_validation_error)
+        self._validation_worker.start()
 
+    def _on_validation_complete(self, result: tuple):
+        """Handle validation result from background worker."""
+        is_valid, message = result
+        
         if is_valid:
             self.validation_label.setText(message)
-            self.validation_label.setStyleSheet("color: #10b981; font-size: 11px;")
+            self.validation_label.setStyleSheet("color: #14b8a6; font-size: 11px;")
         else:
             self.validation_label.setText(message)
             self.validation_label.setStyleSheet("color: #ef4444; font-size: 11px;")
@@ -203,13 +214,26 @@ class SettingsDialog(QDialog):
         self.validate_btn.setEnabled(True)
         self.validate_btn.setText("Validate")
 
-    def test_audio(self):
-        """Test audio recording and playback"""
-        from logger_config import logger
-        import sounddevice as sd
-        import numpy as np
+    def _on_validation_error(self, error_msg: str):
+        """Handle validation error from background worker."""
+        self.validation_label.setText(f"Validation error: {error_msg}")
+        self.validation_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+        self.validate_btn.setEnabled(True)
+        self.validate_btn.setText("Validate")
 
-        logger.info("Audio test starting")
+    def test_audio(self):
+        """Test audio recording and playback using non-blocking approach.
+        
+        Uses QTimer callbacks to avoid blocking the UI thread:
+        1. Start recording (non-blocking, sounddevice streams in background)
+        2. After 2 seconds, stop recording and start playback
+        3. After playback duration, show success message
+        """
+        import sounddevice as sd
+
+        # Prevent multiple concurrent tests
+        if self._audio_test_active:
+            return
 
         # Get selected device
         device_id = self.device_combo.currentData()
@@ -218,52 +242,101 @@ class SettingsDialog(QDialog):
             self.audio_status_label.setStyleSheet("color: #ef4444; font-size: 11px;")
             return
 
+        logger.info(f"Audio test starting with device {device_id}")
+        self._audio_test_active = True
+        self._audio_device_id = device_id
+        self._audio_data = []
+        self._samplerate = 16000
+        self._record_duration = 2.0  # seconds
+
+        # Update UI
+        self.test_audio_btn.setEnabled(False)
+        self.test_audio_btn.setText("Recording...")
+        self.audio_status_label.setText("Recording 2 seconds...")
+        self.audio_status_label.setStyleSheet("color: #4f46e5; font-size: 11px;")
+
         try:
-            # Update UI
-            self.test_audio_btn.setEnabled(False)
-            self.test_audio_btn.setText("Recording...")
-            self.audio_status_label.setText("Recording 2 seconds...")
-            self.audio_status_label.setStyleSheet("color: #3b82f6; font-size: 11px;")
+            # Start recording with callback (non-blocking)
+            def audio_callback(indata, frames, time, status):
+                if status:
+                    logger.warning(f"Audio status: {status}")
+                self._audio_data.append(indata.copy())
 
-            # Process events to update UI
-            from PyQt6.QtWidgets import QApplication
-            QApplication.processEvents()
+            self._audio_stream = sd.InputStream(
+                samplerate=self._samplerate,
+                channels=1,
+                device=device_id,
+                callback=audio_callback,
+                dtype='float32'
+            )
+            self._audio_stream.start()
 
-            # Record 2 seconds
-            samplerate = 16000
-            duration = 2.0
-
-            logger.info(f"Recording from device {device_id} for {duration}s")
-            recording = sd.rec(int(duration * samplerate),
-                              samplerate=samplerate,
-                              channels=1,
-                              device=device_id)
-            sd.wait()  # Wait for recording to complete
-
-            logger.info("Recording complete, playing back")
-
-            # Update UI
-            self.test_audio_btn.setText("Playing...")
-            self.audio_status_label.setText("Playing back recording...")
-            QApplication.processEvents()
-
-            # Play back
-            sd.play(recording, samplerate)
-            sd.wait()  # Wait for playback to complete
-
-            # Success
-            self.audio_status_label.setText("✓ Audio test successful!")
-            self.audio_status_label.setStyleSheet("color: #10b981; font-size: 11px;")
-            logger.info("Audio test successful")
+            # Schedule stop recording after duration
+            QTimer.singleShot(int(self._record_duration * 1000), self._on_recording_complete)
 
         except Exception as e:
-            logger.exception("Audio test failed")
-            self.audio_status_label.setText(f"✗ Test failed: {str(e)}")
-            self.audio_status_label.setStyleSheet("color: #ef4444; font-size: 11px;")
-        finally:
-            # Restore button
-            self.test_audio_btn.setEnabled(True)
-            self.test_audio_btn.setText("Test Audio")
+            logger.exception("Audio test failed to start")
+            self._on_audio_test_error(str(e))
+
+    def _on_recording_complete(self):
+        """Called when recording duration is complete."""
+        import sounddevice as sd
+        import numpy as np
+
+        try:
+            # Stop recording stream
+            if hasattr(self, '_audio_stream') and self._audio_stream:
+                self._audio_stream.stop()
+                self._audio_stream.close()
+                self._audio_stream = None
+
+            if not self._audio_data:
+                self._on_audio_test_error("No audio data recorded")
+                return
+
+            # Concatenate recorded audio
+            self._recorded_audio = np.concatenate(self._audio_data, axis=0)
+            logger.info(f"Recording complete: {len(self._recorded_audio)} samples")
+
+            # Update UI for playback
+            self.test_audio_btn.setText("Playing...")
+            self.audio_status_label.setText("Playing back recording...")
+
+            # Start playback (non-blocking with callback)
+            sd.play(self._recorded_audio, self._samplerate)
+
+            # Schedule completion check after playback duration
+            playback_duration_ms = int((len(self._recorded_audio) / self._samplerate) * 1000) + 100
+            QTimer.singleShot(playback_duration_ms, self._on_playback_complete)
+
+        except Exception as e:
+            logger.exception("Error during recording completion")
+            self._on_audio_test_error(str(e))
+
+    def _on_playback_complete(self):
+        """Called when playback is complete."""
+        import sounddevice as sd
+        sd.stop()  # Ensure playback is stopped
+        
+        logger.info("Audio test successful")
+        self.audio_status_label.setText("✓ Audio test successful!")
+        self.audio_status_label.setStyleSheet("color: #14b8a6; font-size: 11px;")
+        self._reset_audio_test_state()
+
+    def _on_audio_test_error(self, error_msg: str):
+        """Handle audio test error."""
+        logger.error(f"Audio test failed: {error_msg}")
+        self.audio_status_label.setText(f"✗ Test failed: {error_msg}")
+        self.audio_status_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+        self._reset_audio_test_state()
+
+    def _reset_audio_test_state(self):
+        """Reset audio test state and UI."""
+        self._audio_test_active = False
+        self._audio_data = []
+        self._recorded_audio = None
+        self.test_audio_btn.setEnabled(True)
+        self.test_audio_btn.setText("Test Audio")
 
     def handle_save(self):
         new_settings = {

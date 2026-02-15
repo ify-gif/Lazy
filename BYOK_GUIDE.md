@@ -1,41 +1,43 @@
-# Bring Your Own Key (BYOK) Setup Guide
+# Bring Your Own Key (BYOK) Guide 🔑
 
-## Overview
-LAZY is designed as a standalone workstation that connects directly to the OpenAI API using your personal credentials. This ensuring that your project data remains isolated and under your direct control.
+**LAZY Workbench** is designed as a "Logic Augmentation" tool, meaning it uses AI to enhance your workflow. To keep your data private and costs under your control, the application connects directly to OpenAI using **your own personal API key**.
 
----
-
-## 1. Obtain Your OpenAI API Key
-
-1. **Create an Account**: Visit [OpenAI Platform](https://platform.openai.com/signup) and create an account.
-2. **Access API Keys**: Navigate to the **API Keys** section in your dashboard sidebar (or visit [platform.openai.com/api-keys](https://platform.openai.com/api-keys)).
-3. **Generate Key**: Click **Create new secret key**.
-   - Note: Give the key a descriptive name like "LAZY Work Tracker."
-4. **Secure the Key**: Copy the key immediately and save it in a secure location. You will not be able to view it again on the OpenAI website.
+This means:
+*   You pay OpenAI directly (usually pennies per day).
+*   No middleman marks up the price.
+*   Your data policy is between you and OpenAI.
 
 ---
 
-## 2. Configure LAZY
+## Step 1: Get an OpenAI API Key
 
-1. **Launch LAZY**: Open the application on your workspace.
-2. **Open Settings**: Click the gear icon located in the upper right corner of the application header.
-3. **Enter Key**: Paste your secret key (`sk-...`) into the **OpenAI API Key** field.
-4. **Validation**: Click the **Validate** button to ensure your key is active and correctly formatted.
-5. **Save**: Click **Save Settings**. The application will now be ready for transcription and AI polishing.
+1.  Go to [platform.openai.com](https://platform.openai.com/signup).
+2.  Sign up or Log in.
+3.  Click **Dashboard** > **API Keys** (on the left menu).
+4.  Click **+ Create new secret key**.
+5.  Name it "Lazy App" and copy the key (starts with `sk-...`).
+    *   *Note: You won't be able to see it again, so copy it now!*
 
----
-
-## 3. Understanding Usage and Costs
-
-LAZY utilizes the following models:
-- **Whisper**: For converting audio meetings into text transcripts.
-- **GPT-4o**: For generating summaries and professional Jira comments.
-
-OpenAI operates on a pay-as-you-go model. For typical Business Analyst workloads (10-15 meetings a month), the costs are generally minimal. You can monitor your usage and set spend limits at [platform.openai.com/usage](https://platform.openai.com/usage).
+> **Important**: You must have a payment method attached to your OpenAI account for the API to work, even for free tiers in some cases.
 
 ---
 
-## 4. Troubleshooting
+## Step 2: Configure LAZY
 
-- **Validation Failed**: Ensure there are no leading or trailing spaces in the key field. Verify that your OpenAI account has an active payment method or remaining trial credits.
-- **Connection Error**: Ensure your workstation has an active internet connection, as the API requires a cloud handshake for processing.
+1.  Open **LAZY Workbench**.
+2.  Click the **Settings Gear ⚙️** icon in the top right.
+3.  Paste your key into the **OpenAI API Key** field.
+4.  (Optional) Select your preferred model (e.g., `gpt-4o` for best results).
+5.  Click **Save**.
+
+The app will securely store your key in your operating system's localized Credential Locker (Windows Credential Manager or macOS Keychain). It is **never** sent to our servers.
+
+---
+
+## Troubleshooting
+
+*   **Error 401 (Unauthorized)**: Your key is incorrect. Try generating a new one.
+*   **Error 429 (Rate Limit)**: You may be out of credits. Check your billing settings at [platform.openai.com/billing](https://platform.openai.com/account/billing/overview).
+
+---
+*Happy Augmenting!* 🚀

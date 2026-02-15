@@ -181,7 +181,7 @@ class LoadingDialog(QDialog):
         self.setWindowTitle("Loading")
         self.setFixedSize(300, 150)
         self.setModal(True)
-        self.setStyleSheet("background-color: #1e293b; border: 1px solid #27272a; border-radius: 8px;")
+        self.setStyleSheet("background-color: #1a212b; border: 1px solid #545454; border-radius: 8px;")
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
 
         layout = QVBoxLayout(self)
@@ -191,7 +191,7 @@ class LoadingDialog(QDialog):
         # Spinner
         self.spinner = QFrame()
         self.spinner.setFixedSize(50, 50)
-        self.spinner.setStyleSheet("border: 3px solid #27272a; border-top: 3px solid #3b82f6; border-radius: 25px;")
+        self.spinner.setStyleSheet("border: 3px solid #545454; border-top: 3px solid #818cf8; border-radius: 25px;")
         self.spinner_angle = 0
         self.spinner_timer = QTimer()
         self.spinner_timer.timeout.connect(self._rotate_spinner)
@@ -201,7 +201,7 @@ class LoadingDialog(QDialog):
 
         # Message
         self.message_label = QLabel(message)
-        self.message_label.setStyleSheet("color: #e4e4e7; font-size: 12px;")
+        self.message_label.setStyleSheet("color: #ffffff; font-size: 12px;")
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.message_label)
 
@@ -211,7 +211,7 @@ class LoadingDialog(QDialog):
         if self.spinner_angle >= 360:
             self.spinner_angle = 0
         # PyQt6 QSS doesn't support rotation, so we update the visual with dual-color borders
-        self.spinner.setStyleSheet("border: 3px solid #27272a; border-top: 3px solid #3b82f6; border-right: 3px solid #3b82f6; border-radius: 25px;")
+        self.spinner.setStyleSheet("border: 3px solid #545454; border-top: 3px solid #818cf8; border-right: 3px solid #818cf8; border-radius: 25px;")
 
     def set_message(self, message: str):
         """Update the loading message"""
@@ -232,8 +232,8 @@ class StyledConfirmDialog(QDialog):
         self.setFixedSize(400, 180)
         self.setStyleSheet("""
             QDialog {
-                background-color: #000000;
-                border: 1px solid #ffffff;
+                background-color: #1a212b;
+                border: 1px solid #545454;
             }
             QLabel {
                 color: #ffffff;
@@ -242,7 +242,7 @@ class StyledConfirmDialog(QDialog):
             }
             QPushButton {
                 background-color: transparent;
-                border: 1px solid #ffffff;
+                border: 1px solid #545454;
                 border-radius: 6px;
                 color: #ffffff;
                 padding: 8px 30px;
@@ -250,7 +250,9 @@ class StyledConfirmDialog(QDialog):
                 min-width: 80px;
             }
             QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.1);
+                background-color: #818cf8;
+                color: #000000;
+                border-color: #818cf8;
             }
         """)
         
@@ -355,7 +357,7 @@ class PulsatingIcon(QPushButton):
         
         # The actual icon text inside a label (this will breathe)
         self.icon_label = QLabel(text)
-        self.icon_label.setStyleSheet("color: #10b981; font-size: 18px; font-weight: bold; background: transparent;")
+        self.icon_label.setStyleSheet("color: #14b8a6; font-size: 18px; font-weight: bold; background: transparent;")
         self.icon_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         layout.addWidget(self.icon_label)
 
@@ -413,25 +415,25 @@ class CheatSheetPopover(QFrame):
         self.setObjectName("CheatSheetPopover")
         self.setStyleSheet("""
             QFrame#CheatSheetPopover {
-                background-color: #09090b;
-                border: 2px solid #27272a;
+                background-color: #1a212b;
+                border: 2px solid #545454;
                 border-radius: 12px;
             }
             QLabel {
-                color: #e4e4e7;
+                color: #ffffff;
                 font-size: 13px;
                 line-height: 1.6;
             }
             QLabel#Title {
                 font-size: 16px;
                 font-weight: bold;
-                color: #10b981;
+                color: #2dd4bf;
                 margin-top: 5px;
                 margin-bottom: 5px;
             }
             QLabel#SectionHeader {
                 font-weight: bold;
-                color: #3b82f6;
+                color: #818cf8;
                 margin-top: 15px;
             }
             QScrollArea {

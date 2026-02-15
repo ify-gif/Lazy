@@ -1,28 +1,22 @@
-/* Global Overrides to remove focus outlines */
+/* ============================================================
+   LAZY – Global Stylesheet  (theme tokens injected by ThemeManager)
+   ============================================================ */
+
+/* Strip focus outlines — handled by custom focus styles below */
 *:focus {
     outline: none;
 }
 
+/* ── Root / Central Widget ─────────────────────────────────── */
 #CentralWidget, QDialog {
     background-color: {{ background }};
     border: 1px solid {{ border }};
 }
 
-#LogoIconButton {
-    background: transparent;
-    border: none;
-    padding: 0;
-}
-
-#LogoIconButton:hover {
-    background: rgba(128, 128, 128, 0.1);
-    border-radius: 12px;
-}
-
-/* Base Widget Styling */
+/* ── Base Typography ───────────────────────────────────────── */
 QWidget {
     color: {{ muted_foreground }};
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Montserrat', 'Inter', 'Segoe UI', system-ui, sans-serif;
     font-size: 14px;
 }
 
@@ -30,19 +24,25 @@ QLabel {
     color: {{ foreground }};
 }
 
-/* Card/Frame Styles */
+/* ── Frames / Cards ────────────────────────────────────────── */
 QFrame {
     border: none;
 }
 
-#SummaryContainer, #TranscriptContainer, #WorkbenchContainer, #SidebarContainer {
+#SummaryContainer,
+#TranscriptContainer,
+#WorkbenchContainer,
+#SidebarContainer {
     background-color: {{ card }};
     border-radius: 12px;
     border: 1px solid {{ border }};
 }
 
-/* Inputs */
-QTextEdit, QLineEdit, QComboBox, QSpinBox {
+/* ── Inputs ────────────────────────────────────────────────── */
+QTextEdit,
+QLineEdit,
+QComboBox,
+QSpinBox {
     background-color: {{ input_bg }};
     border: 1px solid {{ input }};
     border-radius: 8px;
@@ -52,11 +52,13 @@ QTextEdit, QLineEdit, QComboBox, QSpinBox {
     selection-color: {{ primary_foreground }};
 }
 
-QTextEdit:focus, QLineEdit:focus, QComboBox:focus {
+QTextEdit:focus,
+QLineEdit:focus,
+QComboBox:focus {
     border: 1px solid {{ ring }};
 }
 
-/* Fix QComboBox transparency */
+/* ComboBox dropdown */
 QComboBox QAbstractItemView {
     background-color: {{ card }};
     border: 1px solid {{ border }};
@@ -65,7 +67,7 @@ QComboBox QAbstractItemView {
     outline: none;
 }
 
-/* Buttons */
+/* ── Buttons (default) ─────────────────────────────────────── */
 QPushButton {
     background-color: {{ card }};
     color: {{ card_foreground }};
@@ -86,7 +88,7 @@ QPushButton:pressed {
     color: {{ accent_foreground }};
 }
 
-/* Primary/Action Buttons */
+/* ── Primary / Action Button ───────────────────────────────── */
 #PrimaryButton {
     background-color: {{ primary }};
     border: 1px solid {{ primary }};
@@ -98,7 +100,7 @@ QPushButton:pressed {
     border-color: {{ ring }};
 }
 
-/* Recording Button */
+/* ── Recording Buttons ─────────────────────────────────────── */
 #RecordingButton {
     background-color: {{ background }};
     border: 1px solid {{ destructive }};
@@ -123,7 +125,19 @@ QPushButton:pressed {
     border: 1px solid {{ destructive }};
 }
 
-/* Scroll area */
+/* ── Logo Button ───────────────────────────────────────────── */
+#LogoIconButton {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+#LogoIconButton:hover {
+    background: {{ muted }};
+    border-radius: 12px;
+}
+
+/* ── Scroll Areas ──────────────────────────────────────────── */
 QScrollArea {
     border: none;
     background: transparent;
@@ -142,142 +156,7 @@ QScrollBar::handle:vertical {
     border-radius: 3px;
 }
 
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-
-#LogoIconButton {
-    background: transparent;
-    border: none;
-    padding: 0;
-}
-
-#LogoIconButton:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-}
-
-/* Base Widget Styling */
-QWidget {
-    color: #a1a1aa; /* Zinc-400 for secondary text */
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    font-size: 14px;
-}
-
-QLabel {
-    color: #e4e4e7; /* Zinc-200 for primary text */
-}
-
-/* Card/Frame Styles */
-QFrame {
-    border: none;
-}
-
-#SummaryContainer, #TranscriptContainer {
-    background-color: #09090b; /* Zinc-950 */
-    border-radius: 12px;
-    border: 1px solid #d0d0d0; /* Light grey border */
-}
-
-/* Inputs */
-QTextEdit, QLineEdit, QComboBox, QSpinBox {
-    background-color: #e8e8e8;
-    border: 1px solid #cccccc;
-    border-radius: 8px;
-    padding: 8px 12px;
-    color: #000000;
-    selection-background-color: #3b82f6;
-    selection-color: #ffffff;
-}
-
-QTextEdit:focus, QLineEdit:focus, QComboBox:focus {
-    border: 1px solid #3b82f6;
-}
-
-/* Fix QComboBox transparency */
-QComboBox QAbstractItemView {
-    background-color: #18181b;
-    border: 1px solid #27272a;
-    selection-background-color: #3b82f6;
-    color: #e4e4e7;
-    outline: none;
-}
-
-/* Buttons */
-QPushButton {
-    background-color: #000000;
-    color: #ffffff;
-    border: 1px solid #27272a; /* Zinc-800 */
-    border-radius: 8px;
-    padding: 10px 24px;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-}
-
-QPushButton:hover {
-    background-color: #18181b; /* Zinc-900 */
-    border-color: #52525b; /* Zinc-600 */
-}
-
-QPushButton:pressed {
-    background-color: #27272a; /* Zinc-800 */
-}
-
-/* Primary/Action Buttons - Gradient Style from Hero */
-#PrimaryButton {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255,255,255,0.1), stop:1 rgba(255,255,255,0.05));
-    border: 1px solid #d0d0d0; /* Unified light grey border */
-    color: #ffffff;
-}
-
-#PrimaryButton:hover {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255,255,255,0.15), stop:1 rgba(255,255,255,0.1));
-    border: 1px solid rgba(255,255,255,0.4);
-}
-
-/* Recording Button */
-#RecordingButton {
-    background-color: #000000;
-    border: 1px solid #ef4444;
-    color: #ef4444;
-}
-
-#RecordingButton:hover {
-    background-color: #1f1212;
-}
-
-#RecordHoldButton {
-    background-color: #000000;
-    border: 2px solid #ffffff; /* 2px White border to stand out */
-    color: #ffffff;
-    border-radius: 25px; /* Pill shape */
-}
-
-#RecordHoldButton:pressed {
-    background-color: #ffffff;
-    color: #000000;
-    border: 1px solid #ffffff;
-}
-
-/* Scroll area */
-QScrollArea {
-    border: none;
-    background: transparent;
-}
-
-QScrollBar:vertical {
-    border: none;
-    background: #000000;
-    width: 6px;
-    margin: 0;
-}
-
-QScrollBar::handle:vertical {
-    background: #27272a;
-    min-height: 20px;
-    border-radius: 3px;
-}
-
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
     height: 0px;
 }

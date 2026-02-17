@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "module": "NodeNext",
+        "target": "ESNext",
+        "moduleResolution": "NodeNext",
+        "outDir": "dist-electron",
+        "rootDir": "main",
+        "sourceMap": true,
+        "strict": true,
+        "composite": true,
+        "lib": [
+            "esnext"
+        ],
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
+    },
+    "include": [
+        "main/**/*"
+    ]
+}

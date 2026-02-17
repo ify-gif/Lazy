@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  --card: #f5f5f5;
+  --ring: #606060;
+  --input: #e0e0e0;
+  --muted: #d9d9d9;
+  --accent: #c0c0c0;
+  --border: #d0d0d0;
+  --radius: 0.45rem;
+  --chart-1: #606060;
+  --chart-2: #476666;
+  --chart-3: #909090;
+  --chart-4: #a8a8a8;
+  --chart-5: #c0c0c0;
+  --popover: #f5f5f5;
+  --primary: #606060;
+  --sidebar: #eaeaea;
+  --font-mono: Fira Code, monospace;
+  --font-sans: Montserrat, sans-serif;
+  --secondary: #e0e0e0;
+  --background: #f0f0f0;
+  --font-serif: Georgia, serif;
+  --foreground: #333333;
+  --destructive: #cc3333;
+  --shadow-blur: 0px;
+  --shadow-color: hsl(0 0% 20% / 0.1);
+  --sidebar-ring: #606060;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0.15;
+  --sidebar-accent: #c0c0c0;
+  --sidebar-border: #d0d0d0;
+  --card-foreground: #333333;
+  --shadow-offset-x: 0px;
+  --shadow-offset-y: 2px;
+  --sidebar-primary: #606060;
+  --muted-foreground: #666666;
+  --accent-foreground: #333333;
+  --popover-foreground: #333333;
+  --primary-foreground: #ffffff;
+  --sidebar-foreground: #333333;
+  --secondary-foreground: #333333;
+  --destructive-foreground: #ffffff;
+  --sidebar-accent-foreground: #333333;
+  --sidebar-primary-foreground: #ffffff;
+}
+
+.dark {
+  --card: #202020;
+  --ring: #a0a0a0;
+  --input: #303030;
+  --muted: #2a2a2a;
+  --accent: #404040;
+  --border: #353535;
+  --chart-1: #a0a0a0;
+  --chart-2: #7e9ca0;
+  --chart-3: #707070;
+  --chart-4: #585858;
+  --chart-5: #404040;
+  --popover: #202020;
+  --primary: #a0a0a0;
+  --sidebar: #1f1f1f;
+  --font-mono: Fira Code, monospace;
+  --font-sans: Inter, sans-serif;
+  --secondary: #303030;
+  --background: #1a1a1a;
+  --font-serif: Georgia, serif;
+  --foreground: #d9d9d9;
+  --destructive: #e06666;
+  --sidebar-ring: #a0a0a0;
+  --sidebar-accent: #404040;
+  --sidebar-border: #353535;
+  --card-foreground: #d9d9d9;
+  --sidebar-primary: #a0a0a0;
+  --muted-foreground: #808080;
+  --accent-foreground: #d9d9d9;
+  --popover-foreground: #d9d9d9;
+  --primary-foreground: #1a1a1a;
+  --sidebar-foreground: #d9d9d9;
+  --secondary-foreground: #d9d9d9;
+  --destructive-foreground: #ffffff;
+  --sidebar-accent-foreground: #d9d9d9;
+  --sidebar-primary-foreground: #1a1a1a;
+}
+
+@theme inline {
+  --color-card: var(--card);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-radius: var(--radius);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-popover: var(--popover);
+  --color-primary: var(--primary);
+  --color-sidebar: var(--sidebar);
+  --color-font-mono: var(--font-mono);
+  --color-font-sans: var(--font-sans);
+  --color-secondary: var(--secondary);
+  --color-background: var(--background);
+  --color-font-serif: var(--font-serif);
+  --color-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-shadow-blur: var(--shadow-blur);
+  --color-shadow-color: var(--shadow-color);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-shadow-spread: var(--shadow-spread);
+  --color-shadow-opacity: var(--shadow-opacity);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-card-foreground: var(--card-foreground);
+  --color-shadow-offset-x: var(--shadow-offset-x);
+  --color-shadow-offset-y: var(--shadow-offset-y);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@utility app-region-drag {
+  -webkit-app-region: drag;
+}
+
+@utility app-region-no-drag {
+  -webkit-app-region: no-drag;
+}

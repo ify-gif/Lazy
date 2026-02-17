@@ -1,0 +1,19 @@
+appId: com.lazy.app
+productName: LAZY
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - from: out
+    to: out
+  - from: dist-electron
+    to: dist-electron
+  - package.json
+  - node_modules
+win:
+  target: nsis
+  icon: assets/app_icon_new.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: LAZY

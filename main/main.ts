@@ -13,7 +13,7 @@ function createWindow() {
         minWidth: 800,
         minHeight: 600,
         title: "LAZY",
-        icon: path.join(__dirname, '../public/app_icon_new.ico'), // Use the ico file
+        icon: path.join(__dirname, '../public/app_icon_square.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,

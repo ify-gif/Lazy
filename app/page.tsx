@@ -34,7 +34,7 @@ export default function Home() {
         {/* Hero Image */}
         <div className="w-full max-w-[500px] mb-8 relative">
           <Image
-            src="/logo.png"
+            src="./logo.png"
             alt="LaZy Logo"
             width={500}
             height={200}

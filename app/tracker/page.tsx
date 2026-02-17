@@ -436,7 +436,7 @@ export default function TrackerPage() {
                     title="Go Home"
                 >
                     <img
-                        src="/logo.png"
+                        src="./logo.png"
                         alt="LAZY Logo"
                         className="h-28 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
                     />

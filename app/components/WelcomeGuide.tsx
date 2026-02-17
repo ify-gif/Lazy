@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, ArrowRight, Settings } from "lucide-react";
+import { Sparkles, ArrowRight, X } from "lucide-react";
 
 interface WelcomeGuideProps {
     onOpenSettings: () => void;
@@ -9,13 +9,13 @@ interface WelcomeGuideProps {
 
 export default function WelcomeGuide({ onOpenSettings }: WelcomeGuideProps) {
     const [isVisible, setIsVisible] = useState(false);
+    const [dismissed, setDismissed] = useState(false);
 
     useEffect(() => {
         const checkApiKey = async () => {
             const electron = (window as any).electron;
             if (electron?.settings) {
                 const key = await electron.settings.getApiKey();
-                // Show guide only if key is missing
                 if (!key || key.trim() === "") {
                     setIsVisible(true);
                 }
@@ -24,49 +24,38 @@ export default function WelcomeGuide({ onOpenSettings }: WelcomeGuideProps) {
         checkApiKey();
     }, []);
 
-    if (!isVisible) return null;
+    if (!isVisible || dismissed) return null;
 
     return (
-        <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
-            <div className="relative overflow-hidden rounded-2xl border border-indigo-200/50 dark:border-indigo-500/20 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-8 shadow-2xl dark:shadow-indigo-500/5">
-
-                {/* Decorative background glow */}
-                <div className="absolute -top-24 -right-24 h-48 w-48 bg-indigo-500/10 blur-[80px] rounded-full" />
-                <div className="absolute -bottom-24 -left-24 h-48 w-48 bg-purple-500/10 blur-[80px] rounded-full" />
-
-                <div className="relative flex flex-col md:flex-row items-center gap-8">
-
-                    {/* Icon section */}
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/20">
-                        <Sparkles size={32} />
-                    </div>
-
-                    {/* Content section */}
-                    <div className="flex-1 text-center md:text-left space-y-2">
-                        <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 italic tracking-tight">
-                            Ready to unlock LAZY's full potential?
-                        </h3>
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed max-w-md">
-                            To use the <span className="text-indigo-600 dark:text-indigo-400 font-semibold font-mono">Strategic Consultant</span> and transcription features, you'll need to add your OpenAI API key in settings.
-                        </p>
-                    </div>
-
-                    {/* Action section */}
-                    <button
-                        onClick={onOpenSettings}
-                        className="group relative flex items-center gap-2 overflow-hidden rounded-xl bg-zinc-900 dark:bg-zinc-100 px-6 py-3 text-sm font-bold text-white dark:text-zinc-900 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-zinc-900/10 dark:shadow-none"
-                    >
-                        <Settings size={16} className="transition-transform group-hover:rotate-45" />
-                        <span>Setup Now</span>
-                        <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-                    </button>
+        <div className="absolute top-12 right-7 z-[60] animate-in fade-in slide-in-from-top-2 duration-500">
+            <div className="flex items-center gap-3 px-4 py-2 bg-card border border-border rounded-full shadow-lg backdrop-blur-md">
+                <Sparkles size={14} className="text-primary" />
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-foreground/80 leading-tight">
+                        Setup Required
+                    </span>
+                    <span className="text-[9px] text-muted-foreground font-medium leading-tight">
+                        Add API Key to begin
+                    </span>
                 </div>
-            </div>
 
-            {/* Subtle disclaimer */}
-            <p className="mt-4 text-center text-[10px] uppercase font-bold tracking-widest text-zinc-400 dark:text-zinc-500">
-                LAZY is a BYOK (Bring Your Own Key) application for maximum privacy
-            </p>
+                <div className="h-4 w-[1px] bg-border mx-1" />
+
+                <button
+                    onClick={onOpenSettings}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-primary text-primary-foreground rounded-full text-[10px] font-bold hover:opacity-90 transition-all active:scale-95"
+                >
+                    <span>Configure</span>
+                    <ArrowRight size={10} />
+                </button>
+
+                <button
+                    onClick={() => setDismissed(true)}
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                    <X size={12} />
+                </button>
+            </div>
         </div>
     );
 }

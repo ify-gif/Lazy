@@ -12,8 +12,11 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-8 bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-8">
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* Startup Guide for New Users - Floating top-right */}
+      <WelcomeGuide onOpenSettings={() => setShowSettings(true)} />
 
       {/* Header Actions - Just Settings */}
       <div className="absolute top-10 right-7 z-50 flex items-center gap-3">
@@ -30,9 +33,9 @@ export default function Home() {
         <UpdatePill />
       </div>
 
-      <main className="flex flex-col items-center max-w-2xl w-full">
+      <main className="flex flex-col items-center max-w-2xl w-full gap-6 sm:gap-10">
         {/* Hero Image */}
-        <div className="w-full max-w-[500px] mb-8 relative">
+        <div className="w-full max-w-[420px] relative px-4">
           <Image
             src="./logo.png"
             alt="LaZy Logo"
@@ -43,23 +46,18 @@ export default function Home() {
           />
         </div>
 
-        {/* Startup Guide for New Users */}
-        <div className="w-full mb-10 max-w-xl">
-          <WelcomeGuide onOpenSettings={() => setShowSettings(true)} />
-        </div>
-
         {/* Buttons */}
-        <div className="flex gap-5 flex-wrap justify-center">
+        <div className="flex gap-4 flex-wrap justify-center px-4">
           <button
             onClick={() => router.push('/meeting')}
-            className="group relative overflow-hidden h-[52px] px-9 rounded-full border-2 border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-medium text-base transition-all hover:scale-105 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:border-zinc-500 dark:hover:border-zinc-400 active:scale-95 cursor-pointer"
+            className="group relative overflow-hidden h-[48px] px-8 rounded-full border-2 border-zinc-300 dark:border-zinc-700 bg-card text-foreground font-medium text-sm sm:text-base transition-all hover:scale-105 hover:bg-muted dark:hover:bg-accent hover:border-primary dark:hover:border-primary active:scale-95 cursor-pointer shadow-sm"
           >
             Meeting Transcription
           </button>
 
           <button
             onClick={() => router.push('/tracker')}
-            className="group relative overflow-hidden h-[52px] px-9 rounded-full border-2 border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-medium text-base transition-all hover:scale-105 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:border-zinc-500 dark:hover:border-zinc-400 active:scale-95 cursor-pointer"
+            className="group relative overflow-hidden h-[48px] px-8 rounded-full border-2 border-zinc-300 dark:border-zinc-700 bg-card text-foreground font-medium text-sm sm:text-base transition-all hover:scale-105 hover:bg-muted dark:hover:bg-accent hover:border-primary dark:hover:border-primary active:scale-95 cursor-pointer shadow-sm"
           >
             Work Tracker
           </button>

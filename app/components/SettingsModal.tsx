@@ -16,6 +16,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [apiKey, setApiKey] = useState("");
     const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle');
     const [volume, setVolume] = useState(0);
+    const [updateStatus, setUpdateStatus] = useState<string>("Up to date");
+    const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const [mounted, setMounted] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -172,6 +175,64 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }
     };
 
+    const checkUpdates = async () => {
+        setUpdateStatus("Checking...");
+        try {
+            const result = await (window as any).electron.updates.check();
+            if (!result || !result.updateInfo) {
+                setUpdateStatus("You are on the latest version.");
+                setIsUpdateAvailable(false);
+            }
+        } catch (err) {
+            setUpdateStatus("Failed to check for updates.");
+            console.error(err);
+        }
+    };
+
+    const handleDownloadUpdate = async () => {
+        setIsDownloading(true);
+        setUpdateStatus("Downloading...");
+        try {
+            await (window as any).electron.updates.download();
+        } catch (err) {
+            setUpdateStatus("Download failed.");
+            setIsDownloading(false);
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const unsubscribe = (window as any).electron.updates.onUpdateEvent((data: { event: string, data?: any }) => {
+            switch (data.event) {
+                case 'update-available':
+                    setUpdateStatus(`Version ${data.data.version} available.`);
+                    setIsUpdateAvailable(true);
+                    break;
+                case 'update-not-available':
+                    setUpdateStatus("You are on the latest version.");
+                    setIsUpdateAvailable(false);
+                    break;
+                case 'download-progress':
+                    setUpdateStatus(`Downloading: ${Math.floor(data.data)}%`);
+                    break;
+                case 'update-downloaded':
+                    setUpdateStatus("Update ready to install.");
+                    setIsUpdateAvailable(true);
+                    setIsDownloading(false);
+                    break;
+                case 'error':
+                    setUpdateStatus("Update problem. Please try again.");
+                    setIsDownloading(false);
+                    break;
+            }
+        });
+
+        return () => unsubscribe();
+    }, [isOpen]);
+
+
     if (!isOpen || !mounted) return null;
 
     return (
@@ -297,6 +358,33 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             >
                                 Dark
                             </button>
+                        </div>
+                    </div>
+
+                    {/* Updates */}
+                    <div className="space-y-3 pt-2">
+                        <label className="text-sm font-medium text-muted-foreground transition-colors">System Update</label>
+                        <div className="flex items-center justify-between p-3 bg-secondary/50 border border-border rounded-md">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-xs font-semibold text-foreground">{updateStatus}</span>
+                                <span className="text-[10px] text-muted-foreground">GitHub Public Channel</span>
+                            </div>
+                            {isUpdateAvailable ? (
+                                <button
+                                    onClick={updateStatus.includes("ready") ? () => (window as any).electron.updates.install() : handleDownloadUpdate}
+                                    disabled={isDownloading}
+                                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-full shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                    {isDownloading ? "Downloading..." : updateStatus.includes("ready") ? "Restart Now" : "Download"}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={checkUpdates}
+                                    className="px-4 py-1.5 border border-border hover:bg-muted text-foreground text-[10px] font-bold uppercase tracking-wider rounded-full transition-all active:scale-95"
+                                >
+                                    Check Now
+                                </button>
+                            )}
                         </div>
                     </div>
 

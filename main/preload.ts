@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electron', {
         getApiKey: () => ipcRenderer.invoke('get-api-key'),
         set: (key: string, value: string) => ipcRenderer.send('set-setting', { key, value }),
         get: (key: string) => ipcRenderer.invoke('get-setting', key),
+        getVersion: () => ipcRenderer.invoke('get-app-version'),
         sendStatus: (status: 'ready' | 'recording' | 'processing' | 'error', message?: string) => ipcRenderer.send('app-status-update', { status, message }),
         onStatusChange: (callback: (data: { status: string, message?: string }) => void) => {
             const subscription = (_event: any, data: any) => callback(data);
@@ -27,6 +28,16 @@ contextBridge.exposeInMainWorld('electron', {
             return () => ipcRenderer.removeListener('app-status-update', subscription);
         },
         validateApiKey: (key: string) => ipcRenderer.invoke('ai-validate-key', key),
+    },
+    updates: {
+        check: () => ipcRenderer.invoke('app-check-update'),
+        download: () => ipcRenderer.invoke('app-download-update'),
+        install: () => ipcRenderer.send('app-install-update'),
+        onUpdateEvent: (callback: (data: { event: string, data?: any }) => void) => {
+            const subscription = (_event: any, data: any) => callback(data);
+            ipcRenderer.on('app-update-event', subscription);
+            return () => ipcRenderer.removeListener('app-update-event', subscription);
+        },
     },
     ai: {
         transcribe: (buffer: ArrayBuffer) => ipcRenderer.invoke('ai-transcribe', buffer),

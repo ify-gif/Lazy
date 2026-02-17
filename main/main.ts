@@ -89,6 +89,70 @@ import { AIService } from './aiService';
 import { DBService } from './dbService';
 DBService.init();
 
+// Auto Updater
+import { autoUpdater } from 'electron-updater';
+
+// Configure Auto Updater
+autoUpdater.autoDownload = false; // We want manual download
+autoUpdater.allowPrerelease = true; // Optional, but good for testing
+
+// Map Update Events to Global Status
+autoUpdater.on('checking-for-update', () => {
+    broadcastStatus('processing', 'Checking for updates...');
+});
+
+autoUpdater.on('update-available', (info) => {
+    broadcastStatus('ready', `Update v${info.version} available`);
+    // Send specifically for the Update Pill
+    broadcastUpdateEvent('update-available', info);
+});
+
+autoUpdater.on('update-not-available', () => {
+    broadcastStatus('ready', 'App is up to date');
+    broadcastUpdateEvent('update-not-available');
+});
+
+autoUpdater.on('error', (err) => {
+    broadcastStatus('error', `Update error: ${err.message}`);
+    broadcastUpdateEvent('error', err.message);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    const percent = Math.floor(progressObj.percent);
+    broadcastStatus('processing', `Downloading: ${percent}%`);
+    broadcastUpdateEvent('download-progress', percent);
+});
+
+autoUpdater.on('update-downloaded', () => {
+    broadcastStatus('ready', 'Update ready to install');
+    broadcastUpdateEvent('update-downloaded');
+});
+
+function broadcastStatus(status: string, message: string) {
+    BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('app-status-update', { status, message });
+    });
+}
+
+function broadcastUpdateEvent(event: string, data?: any) {
+    BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('app-update-event', { event, data });
+    });
+}
+
+// Update Handlers
+ipcMain.handle('app-check-update', async () => {
+    return await autoUpdater.checkForUpdates();
+});
+
+ipcMain.handle('app-download-update', async () => {
+    return await autoUpdater.downloadUpdate();
+});
+
+ipcMain.on('app-install-update', () => {
+    autoUpdater.quitAndInstall();
+});
+
 ipcMain.handle('ai-transcribe', async (_event, arrayBuffer: ArrayBuffer) => {
     const buffer = Buffer.from(arrayBuffer);
     return await AIService.transcribe(buffer);
@@ -136,14 +200,22 @@ ipcMain.handle('db-delete-item', async (_event, { table, id }) => {
 });
 
 ipcMain.on('app-status-update', (_event, { status, message }) => {
-    // Broadcast to all windows
-    BrowserWindow.getAllWindows().forEach(win => {
-        win.webContents.send('app-status-update', { status, message });
-    });
+    broadcastStatus(status, message);
+});
+
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
 });
 
 app.whenReady().then(() => {
     createWindow();
+
+    // Check for updates on startup
+    setTimeout(() => {
+        autoUpdater.checkForUpdates().catch(err => {
+            console.error("Initial update check failed", err);
+        });
+    }, 3000);
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();

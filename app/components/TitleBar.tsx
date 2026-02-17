@@ -67,9 +67,9 @@ export default function TitleBar() {
     const getStatusText = () => {
         switch (status) {
             case 'recording': return 'Recording...';
-            case 'processing': return 'Processing...';
+            case 'processing': return errorMessage || 'Processing...';
             case 'error': return errorMessage || 'System Error';
-            case 'ready': return 'Ready';
+            case 'ready': return errorMessage || 'Ready';
             default: return 'Initializing...';
         }
     };

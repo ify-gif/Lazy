@@ -19,6 +19,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [updateStatus, setUpdateStatus] = useState<string>("Up to date");
     const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'uptodate' | 'error' | 'available'>('idle');
 
     const [mounted, setMounted] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -177,14 +178,21 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     const checkUpdates = async () => {
         setUpdateStatus("Checking...");
+        setCheckStatus('checking');
         try {
             const result = await (window as any).electron.updates.check();
             if (!result || !result.updateInfo) {
                 setUpdateStatus("You are on the latest version.");
                 setIsUpdateAvailable(false);
+                setCheckStatus('uptodate');
+                setTimeout(() => setCheckStatus('idle'), 3000);
+            } else {
+                setCheckStatus('available');
             }
         } catch (err) {
             setUpdateStatus("Failed to check for updates.");
+            setCheckStatus('error');
+            setTimeout(() => setCheckStatus('idle'), 3000);
             console.error(err);
         }
     };
@@ -209,10 +217,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 case 'update-available':
                     setUpdateStatus(`Version ${data.data.version} available.`);
                     setIsUpdateAvailable(true);
+                    setCheckStatus('available');
                     break;
                 case 'update-not-available':
                     setUpdateStatus("You are on the latest version.");
                     setIsUpdateAvailable(false);
+                    setCheckStatus('idle');
                     break;
                 case 'download-progress':
                     setUpdateStatus(`Downloading: ${Math.floor(data.data)}%`);
@@ -369,20 +379,25 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 <span className="text-xs font-semibold text-foreground">{updateStatus}</span>
                                 <span className="text-[10px] text-muted-foreground">GitHub Public Channel</span>
                             </div>
-                            {isUpdateAvailable ? (
+                            {isUpdateAvailable || checkStatus === 'available' ? (
                                 <button
                                     onClick={updateStatus.includes("ready") ? () => (window as any).electron.updates.install() : handleDownloadUpdate}
                                     disabled={isDownloading}
-                                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-full shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                                    className="px-4 py-1.5 bg-destructive border border-destructive hover:bg-destructive/90 text-destructive-foreground text-[10px] font-bold uppercase tracking-wider rounded-full shadow-sm transition-all active:scale-95 disabled:opacity-50"
                                 >
                                     {isDownloading ? "Downloading..." : updateStatus.includes("ready") ? "Restart Now" : "Download"}
                                 </button>
                             ) : (
                                 <button
                                     onClick={checkUpdates}
-                                    className="px-4 py-1.5 border border-border hover:bg-muted text-foreground text-[10px] font-bold uppercase tracking-wider rounded-full transition-all active:scale-95"
+                                    className={`px-4 py-1.5 border border-border text-[10px] font-bold uppercase tracking-wider rounded-full transition-all active:scale-95 min-w-[100px] ${checkStatus === 'uptodate' ? "bg-green-600 border-green-600 text-white" :
+                                            checkStatus === 'error' ? "bg-destructive border-destructive text-destructive-foreground" :
+                                                "bg-primary hover:bg-primary/90 text-primary-foreground"
+                                        }`}
                                 >
-                                    Check Now
+                                    {checkStatus === 'checking' ? "Checking..." :
+                                        checkStatus === 'uptodate' ? "Up to date" :
+                                            checkStatus === 'error' ? "Try Again" : "Check Now"}
                                 </button>
                             )}
                         </div>

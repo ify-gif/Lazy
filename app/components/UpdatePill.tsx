@@ -1,19 +1,32 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Download, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function UpdatePill() {
     const [version, setVersion] = useState<string>('v0.0.0');
     const [status, setStatus] = useState<'checking' | 'ready' | 'update-available' | 'downloading' | 'error'>('checking');
     const [progress, setProgress] = useState<number>(0);
     const [updateInfo, setUpdateInfo] = useState<any>(null);
+    const [showVersion, setShowVersion] = useState(true);
+
+    useEffect(() => {
+        // Toggle text every 3 seconds
+        const interval = setInterval(() => {
+            setShowVersion(prev => !prev);
+        }, 3000);
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         // Get initial version
         (window as any).electron.settings.getVersion().then((v: string) => {
             setVersion(`v${v}`);
         });
+
+        // Force "Ready" state after 5 seconds if still checking (common for dev/network delay)
+        const checkTimeout = setTimeout(() => {
+            setStatus(prev => prev === 'checking' ? 'ready' : prev);
+        }, 5000);
 
         // Listen for update events
         const unsubscribe = (window as any).electron.updates.onUpdateEvent((data: { event: string, data?: any }) => {
@@ -35,12 +48,16 @@ export default function UpdatePill() {
                     // We'll use this to trigger install click
                     break;
                 case 'error':
-                    setStatus('error');
+                    // In dev, errors are common. If checking failed, just say ready.
+                    setStatus('ready');
                     break;
             }
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            clearTimeout(checkTimeout);
+        };
     }, []);
 
     const handleClick = async () => {
@@ -52,13 +69,17 @@ export default function UpdatePill() {
             // Manual check
             setStatus('checking');
             await (window as any).electron.updates.check();
+            // Reset timeout for manual check
+            setTimeout(() => {
+                setStatus(prev => prev === 'checking' ? 'ready' : prev);
+            }, 5000);
         }
     };
 
     const getStatusStyles = () => {
         switch (status) {
             case 'checking':
-                return 'border-zinc-300 dark:border-zinc-700 bg-zinc-100 text-zinc-500 animate-pulse-slow';
+                return 'border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 animate-pulse';
             case 'update-available':
                 return 'border-red-500/50 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 animate-breathe-red';
             case 'downloading':
@@ -76,7 +97,10 @@ export default function UpdatePill() {
 
     const getLabel = () => {
         if (status === 'downloading') return `${progress}%`;
-        if (status === 'ready' && updateInfo) return 'Install';
+        if (status === 'ready' && updateInfo) return showVersion ? version : 'Install Now';
+        if (status === 'ready') return showVersion ? version : 'Up to Date';
+        if (status === 'update-available') return showVersion ? version : 'New Update';
+        if (status === 'checking') return 'Checking...';
         return version;
     };
 
@@ -89,11 +113,7 @@ export default function UpdatePill() {
             `}
             title={status === 'update-available' ? "Update Available - Click to Download" : "System Status"}
         >
-            {status === 'checking' && <RefreshCw size={10} className="animate-spin" />}
-            {status === 'update-available' && <AlertCircle size={10} />}
             {status === 'downloading' && <div className="h-1 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${progress}%` }} /></div>}
-            {status === 'ready' && !updateInfo && <CheckCircle2 size={10} />}
-            {status === 'ready' && updateInfo && <Download size={10} />}
 
             <span>{getLabel()}</span>
 

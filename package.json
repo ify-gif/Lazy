@@ -1,12 +1,42 @@
 {
   "name": "lazy-electron",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "Strategic Consultant Second Brain",
+  "author": "Ify Gold",
   "private": true,
   "repository": {
     "type": "git",
     "url": "https://github.com/ify-gif/Lazy.git"
   },
   "build": {
+    "appId": "com.ifygold.lazy",
+    "productName": "LAZY",
+    "copyright": "Copyright \u00a9 2026 Ify Gold",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      ".next/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LAZY",
+      "artifactName": "${productName} Setup ${version}.${ext}",
+      "uninstallDisplayName": "LAZY"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
     "publish": [
       {
         "provider": "github",

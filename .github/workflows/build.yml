@@ -8,6 +8,8 @@ on:
 jobs:
   release:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Check out git repository
@@ -22,6 +24,6 @@ jobs:
         run: npm install
 
       - name: Build and Publish
-        run: npm run electron-build
+        run: npm run electron-build -- --publish always
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

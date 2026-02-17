@@ -1,6 +1,6 @@
 {
   "name": "lazy-electron",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Strategic Consultant Second Brain",
   "author": "Ify Gold",
   "private": true,
@@ -38,6 +38,14 @@
       "target": [
         "nsis"
       ]
+    },
+    "mac": {
+      "icon": "public/app_icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
     },
     "publish": [
       {

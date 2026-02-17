@@ -86,7 +86,7 @@ export default function TitleBar() {
                     title="Go Home"
                 >
                     <img
-                        src="/app_icon.png"
+                        src="./app_icon.png"
                         alt="App Logo"
                         className="w-4 h-4 object-contain"
                     />

@@ -7,8 +7,7 @@ log.transports.file.level = 'info';
 log.transports.console.level = 'debug';
 
 // Set log file path in the user's app data directory
-const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
-log.transports.file.resolvePathFn = () => logPath;
+log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'logs', 'main.log');
 
 // Add a custom format
 log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';

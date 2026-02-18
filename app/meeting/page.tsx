@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { History, Save, Copy, Download, Trash2, Mic } from "lucide-react";
@@ -6,7 +8,7 @@ import Modal from "../components/Modal";
 import Button from "../components/Button";
 import Input from "../components/Input";
 import ReactMarkdown from 'react-markdown';
-import { Meeting } from "../../main/types";
+import type { Meeting } from "../../main/types";
 
 export default function MeetingPage() {
     const router = useRouter();
@@ -204,7 +206,8 @@ export default function MeetingPage() {
         window.electron?.settings?.sendStatus('processing', 'Transcribing...');
         try {
             // 1. Transcribe (Whisper)
-            const text = await window.electron.ai.transcribe(arrayBuffer);
+            const text = await window.electron.ai?.transcribe(arrayBuffer);
+            if (!text) throw new Error("Transcription returned empty result");
             setTranscript(text);
 
             window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
@@ -244,7 +247,7 @@ export default function MeetingPage() {
     return (
         <div className="flex h-screen flex-col bg-background text-foreground font-sans overflow-hidden">
             {/* --- TOP BRAND BAR --- */}
-            <div className="flex items-center justify-center py-2 border-b border-border bg-card/50">
+            <div className="flex items-center justify-center py-0 border-b border-border bg-card/50">
                 <button
                     onClick={() => router.push('/')}
                     className="transition-opacity focus:outline-none cursor-pointer p-0 m-0 border-none bg-transparent"
@@ -253,42 +256,43 @@ export default function MeetingPage() {
                     <img
                         src="/logo.png"
                         alt="LAZY Logo"
-                        className="h-12 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
+                        className="h-32 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
                     />
                 </button>
             </div>
 
             {/* --- ACTIONS HEADER --- */}
-            <header className="flex items-center justify-between px-8 py-4 bg-muted/20 border-b border-border">
-                <div className="flex items-center gap-6 min-w-0">
+            <header className="flex items-center justify-between px-3 py-2 bg-muted/20 border-b border-border">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Input
                         placeholder="Meeting Title..."
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
-                        className="w-80"
+                        className="w-64 h-7 text-xs"
                     />
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 focus-within:z-10">
                         <Button
                             variant={isRecording ? 'destructive' : 'primary'}
                             onClick={handleToggleRecording}
-                            className={isRecording ? 'animate-pulse' : ''}
+                            size="sm"
+                            className={`h-7 px-3 text-[10px] uppercase font-bold tracking-wider ${isRecording ? 'animate-pulse' : ''}`}
                         >
-                            <Mic size={16} className="mr-2" />
-                            {isRecording ? "Stop Recording" : "Start Recording"}
+                            <Mic size={12} className="mr-1.5" />
+                            {isRecording ? "Stop" : "Record"}
                         </Button>
 
                         {isRecording && (
-                            <div className="flex items-center gap-3 px-3 py-1.5 bg-background rounded-md border border-border shadow-inner">
-                                <span className="text-sm font-mono text-foreground font-medium w-12">{formatTime(recordingTime)}</span>
-                                <Waveform stream={stream} className="w-24 h-6" />
+                            <div className="flex items-center gap-2 px-2 py-0.5 bg-background rounded border border-border shadow-inner h-7">
+                                <span className="text-[10px] font-mono text-foreground font-medium w-9 italic text-center">{formatTime(recordingTime)}</span>
+                                <Waveform stream={stream} className="w-16 h-4" />
                             </div>
                         )}
 
                         {isProcessing && (
-                            <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/30 rounded-md">
-                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
-                                <span className="text-xs font-medium text-muted-foreground mr-1">AI Processing...</span>
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-secondary/30 rounded h-7">
+                                <div className="w-1 h-1 bg-primary rounded-full animate-bounce" />
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mr-1">Processing...</span>
                             </div>
                         )}
                     </div>
@@ -296,7 +300,9 @@ export default function MeetingPage() {
 
                 <Button
                     variant={showHistory ? 'secondary' : 'outline'}
+                    size="sm"
                     onClick={() => setShowHistory(!showHistory)}
+                    className="h-7 px-3 text-[10px] font-bold uppercase tracking-wider"
                     title="View History"
                 >
                     {showHistory ? 'Hide History' : 'History'}
@@ -304,57 +310,57 @@ export default function MeetingPage() {
             </header>
 
             {/* --- CONTENT --- */}
-            <main className="flex-1 flex overflow-hidden p-4 gap-4">
+            <div className="flex-1 flex overflow-hidden p-1 gap-1">
 
                 {/* HISTORY SIDEBAR */}
                 {showHistory && (
-                    <aside className="w-80 flex flex-col min-w-[280px]">
+                    <aside className="w-64 flex flex-col">
                         <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                            <div className="px-4 py-3 border-b border-border bg-muted/50">
-                                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest text-center flex items-center justify-center gap-2">
-                                    <History size={14} /> Saved Meetings
+                            <div className="px-3 py-1 border-b border-border bg-muted/50">
+                                <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center flex items-center justify-center gap-2">
+                                    Saved Meetings
                                 </h3>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
                                 {historyItems.length === 0 ? (
-                                    <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">No meetings yet</div>
+                                    <div className="text-center py-6 opacity-30 italic text-[10px] text-muted-foreground">No history</div>
                                 ) : historyItems.map(item => (
                                     <div
                                         key={item.id}
                                         onClick={() => handleSelectMeeting(item)}
-                                        className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-all ${selectedMeetingId === item.id
+                                        className={`group flex items-center justify-between p-1.5 rounded cursor-pointer transition-all ${selectedMeetingId === item.id
                                             ? "bg-primary/10 border border-primary/20 shadow-sm"
                                             : "hover:bg-secondary border border-transparent"
                                             }`}
                                     >
-                                        <div className="flex flex-col min-w-0 mr-3">
-                                            <div className="font-semibold text-xs text-foreground truncate" title={item.title || "Untitled"}>
+                                        <div className="flex flex-col min-w-0 mr-1.5">
+                                            <div className="font-bold text-[10px] text-foreground truncate" title={item.title || "Untitled"}>
                                                 {item.title || "Untitled"}
                                             </div>
-                                            <span className="text-[10px] text-muted-foreground">
+                                            <span className="text-[8px] text-muted-foreground font-medium uppercase tracking-tighter">
                                                 {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
                                             </span>
                                         </div>
 
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-7 w-7"
+                                                className="h-5 w-5"
                                                 onClick={(e) => handleExportItem(item, e)}
                                                 disabled={!item.summary}
                                                 title="Export"
                                             >
-                                                <Download size={14} />
+                                                <Download size={10} />
                                             </Button>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                className="h-5 w-5 text-destructive hover:bg-destructive/10"
                                                 onClick={(e) => handleDeleteClick(item.id!, e)}
                                                 title="Delete"
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={10} />
                                             </Button>
                                         </div>
                                     </div>
@@ -366,29 +372,29 @@ export default function MeetingPage() {
 
                 {/* Left: Transcript (60%) */}
                 <div className="flex-[1.5] flex flex-col min-w-0 border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                    <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/50">
-                        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="flex items-center justify-between px-3 py-1 border-b border-border bg-muted/50">
+                        <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Transcript
                         </h2>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => { setTranscript(""); setSummary(""); setTitle(""); setRecordingTime(0); setSelectedMeetingId(null); }}
-                                className="text-xs h-7"
+                                className="text-[9px] h-5 px-2 font-bold uppercase"
                             >
-                                Clear / New
+                                New
                             </Button>
-                            <span className="text-xs text-muted-foreground font-mono">
+                            <span className="text-[9px] text-muted-foreground font-mono italic">
                                 {(transcript || "").split(/\s+/).filter(w => w).length} words
                             </span>
                         </div>
                     </div>
 
-                    <div className="flex-1 p-6 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed bg-background/50">
+                    <div className="flex-1 p-3 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed bg-background/50 text-foreground">
                         {transcript || (
-                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
-                                <p>Your transcription will appear here as you speak.</p>
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-[10px] text-center px-6 opacity-40">
+                                <p>Speak to begin transcription...</p>
                             </div>
                         )}
                     </div>
@@ -396,20 +402,21 @@ export default function MeetingPage() {
 
                 {/* Right: Summary (40%) */}
                 <div className="flex-1 flex flex-col min-w-0 border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                    <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/50">
-                        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="flex items-center justify-between px-3 py-1 border-b border-border bg-muted/50">
+                        <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             OUTPUT
                         </h2>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                             <Button
                                 size="sm"
-                                className="h-7 text-xs"
+                                className="h-5 text-[9px] px-2 font-bold uppercase"
                                 onClick={async () => {
                                     if (!transcript || !window.electron?.ai) return;
                                     setIsProcessing(true);
                                     window.electron.settings.sendStatus('processing', 'Summarizing...');
                                     try {
-                                        const summaryResult = await window.electron.ai.summarizeMeeting(transcript);
+                                        const summaryResult = await window.electron.ai?.summarizeMeeting(transcript);
+                                        if (!summaryResult) throw new Error("Summary generation failed");
                                         setSummary(summaryResult);
                                         window.electron.settings.sendStatus('ready', 'Ready');
                                     } catch (err) {
@@ -427,7 +434,7 @@ export default function MeetingPage() {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="h-6 w-6"
                                 onClick={async () => {
                                     if (!transcript || !summary || !window.electron?.db) return;
                                     try {
@@ -436,44 +443,44 @@ export default function MeetingPage() {
                                             transcript,
                                             summary
                                         );
-                                        setAlertMessage("Meeting saved successfully!");
+                                        setAlertMessage("Meeting saved!");
                                         loadHistory();
                                     } catch (err) {
-                                        console.error("Failed to save meeting", err);
+                                        console.error("Failed to save", err);
                                     }
                                 }}
                                 title="Save"
                             >
-                                <Save size={16} />
+                                <Save size={12} />
                             </Button>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="h-6 w-6"
                                 onClick={() => {
                                     navigator.clipboard.writeText(summary);
-                                    setAlertMessage("Copied to clipboard!");
+                                    setAlertMessage("Copied!");
                                 }}
                                 title="Copy"
                             >
-                                <Copy size={16} />
+                                <Copy size={12} />
                             </Button>
                         </div>
                     </div>
 
-                    <div className="flex-1 p-5 overflow-y-auto bg-background/50">
+                    <div className="flex-1 p-3 overflow-y-auto bg-background/50 text-xs text-foreground">
                         {summary ? (
-                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                            <div className="prose prose-xs dark:prose-invert max-w-none">
                                 <ReactMarkdown>{summary}</ReactMarkdown>
                             </div>
                         ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
-                                <p>AI Summary will be generated after the meeting.</p>
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-[10px] text-center px-4 opacity-40">
+                                <p>Summary appears here after generation.</p>
                             </div>
                         )}
                     </div>
                 </div>
-            </main>
+            </div>
 
             {/* --- MODALS --- */}
             <Modal
@@ -481,28 +488,30 @@ export default function MeetingPage() {
                 onClose={() => setAlertMessage(null)}
                 title="Notification"
                 footer={
-                    <Button onClick={() => setAlertMessage(null)}>
+                    <Button onClick={() => setAlertMessage(null)} size="sm">
                         OK
                     </Button>
                 }
             >
-                <p className="py-4 text-center">{alertMessage}</p>
+                <p className="py-2 text-center text-sm">{alertMessage}</p>
             </Modal>
 
             <Modal
                 isOpen={pendingDeleteId !== null}
                 onClose={() => setPendingDeleteId(null)}
-                title="Delete Meeting"
+                title="Confirm Delete"
                 footer={
-                    <div className="flex gap-3">
+                    <div className="flex gap-2">
                         <Button
                             variant="ghost"
+                            size="sm"
                             onClick={() => setPendingDeleteId(null)}
                         >
                             Cancel
                         </Button>
                         <Button
                             variant="destructive"
+                            size="sm"
                             onClick={confirmDelete}
                         >
                             Delete
@@ -510,7 +519,7 @@ export default function MeetingPage() {
                     </div>
                 }
             >
-                <p className="py-4">Are you sure you want to permanently delete this meeting? This action cannot be undone.</p>
+                <p className="py-2 text-sm text-muted-foreground">Permanently delete this meeting session? This cannot be undone.</p>
             </Modal>
         </div>
     );

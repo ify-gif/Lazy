@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -8,7 +10,7 @@ import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
 import { SearchInput } from "../components/Input";
-import { WorkStory, AIResponse } from "../../main/types";
+import type { WorkStory, AIResponse } from "../../main/types";
 
 export default function TrackerPage() {
     const router = useRouter();
@@ -436,7 +438,7 @@ export default function TrackerPage() {
     return (
         <div className="flex h-screen flex-col bg-background text-foreground font-sans overflow-hidden">
             {/* --- TOP BRAND BAR --- */}
-            <div className="flex items-center justify-center py-2 border-b border-border bg-card/50">
+            <div className="flex items-center justify-center py-0 border-b border-border bg-card/50">
                 <button
                     onClick={() => router.push('/')}
                     className="transition-opacity focus:outline-none cursor-pointer p-0 m-0 border-none bg-transparent"
@@ -445,145 +447,132 @@ export default function TrackerPage() {
                     <img
                         src="/logo.png"
                         alt="LAZY Logo"
-                        className="h-12 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
+                        className="h-32 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
                     />
                 </button>
             </div>
 
-            <div className="flex-1 flex overflow-hidden p-4 gap-4">
-                {/* --- SIDEBAR: HISTORY --- */}
-                <aside className="w-80 flex flex-col gap-4">
-                    <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                        <div className="p-4 border-b border-border flex flex-col gap-4 bg-muted/30">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">History</h2>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={handleNewSession}
-                                    title="New Session"
+            <div className="flex-1 flex overflow-hidden p-1 gap-1">
+                {/* --- LEFT: HISTORY --- */}
+                <aside className="w-64 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <div className="bg-muted/50 border-b border-border p-1">
+                        <SearchInput
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="bg-background/80 h-7 text-[10px]"
+                        />
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
+                        {historyItems.length === 0 ? (
+                            <div className="text-center py-6 opacity-30 italic text-[10px] text-muted-foreground">No history</div>
+                        ) : historyItems
+                            .filter(item => item.overview.toLowerCase().includes(searchQuery.toLowerCase()))
+                            .map(item => (
+                                <div
+                                    key={item.id}
+                                    onClick={() => handleSelectItem(item)}
+                                    className={`group flex items-center justify-between p-1.5 rounded cursor-pointer transition-all ${selectedStoryId === item.id
+                                        ? "bg-primary/10 border border-primary/20 shadow-sm"
+                                        : "hover:bg-secondary border border-transparent"
+                                        }`}
                                 >
-                                    <Plus size={18} />
-                                </Button>
-                            </div>
-                            <SearchInput
-                                placeholder="Search sessions..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                            {historyItems.length === 0 ? (
-                                <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">No history yet</div>
-                            ) : historyItems
-                                .filter(item => item.overview.toLowerCase().includes(searchQuery.toLowerCase()))
-                                .map(item => (
-                                    <div
-                                        key={item.id}
-                                        onClick={() => handleSelectItem(item)}
-                                        className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-all ${selectedStoryId === item.id
-                                            ? "bg-primary/10 border border-primary/20 shadow-sm"
-                                            : "hover:bg-secondary border border-transparent"
-                                            }`}
-                                    >
-                                        <div className="flex flex-col min-w-0 mr-3">
-                                            <div className="font-semibold text-xs text-foreground truncate" title={item.overview}>
-                                                {item.overview || "Untitled Session"}
-                                            </div>
-                                            <span className="text-[10px] text-muted-foreground">
-                                                {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
-                                            </span>
+                                    <div className="flex flex-col min-w-0 mr-1.5">
+                                        <div className="font-semibold text-[10px] text-foreground truncate" title={item.overview}>
+                                            {item.overview || "Untitled"}
                                         </div>
-
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                onClick={(e) => handleExportItem(item, e)}
-                                                title="Export"
-                                            >
-                                                <Download size={14} />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                                onClick={(e) => handleDeleteClick(item.id!, e)}
-                                                title="Delete"
-                                            >
-                                                <Trash2 size={14} />
-                                            </Button>
-                                        </div>
+                                        <span className="text-[8px] text-muted-foreground font-medium uppercase tracking-tighter">
+                                            {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
+                                        </span>
                                     </div>
-                                ))}
-                        </div>
+
+                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-5 w-5"
+                                            onClick={(e) => handleExportItem(item, e)}
+                                            title="Export"
+                                        >
+                                            <Download size={10} />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-5 w-5 text-destructive hover:bg-destructive/10"
+                                            onClick={(e) => handleDeleteClick(item.id!, e)}
+                                            title="Delete"
+                                        >
+                                            <Trash2 size={10} />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
                     </div>
                 </aside>
 
                 {/* --- CENTER: WORKBENCH --- */}
-                <main className="flex-1 flex flex-col gap-4 overflow-hidden">
+                <main className="flex-1 flex flex-col gap-1 overflow-hidden">
                     <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                        <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/50">
-                            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                {activeTab === 'story' ? 'Transcript' : 'Comment Transcript'}
-                                <span className="ml-2 text-[10px] font-mono text-zinc-400">
+                        <div className="flex items-center justify-between px-3 py-1 bg-muted/50 border-b border-border">
+                            <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                Transcript
+                                <span className="ml-2 text-[9px] font-mono text-zinc-400">
                                     {(overview || "").split(/\s+/).filter(w => w).length} words
                                 </span>
                             </h2>
-                            <div className="flex items-center gap-2">
-                                {selectedStoryId && (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={handleNewSession}
-                                        className="text-xs h-7"
-                                    >
-                                        New
-                                    </Button>
-                                )}
-                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleNewSession}
+                                className="text-[9px] h-5 px-2 uppercase tracking-wider font-bold"
+                            >
+                                New
+                            </Button>
                         </div>
 
                         <textarea
-                            className="flex-1 w-full p-6 bg-transparent resize-none focus:outline-none text-base leading-relaxed text-foreground placeholder:text-muted-foreground overflow-y-auto"
-                            placeholder={activeTab === 'story' ? "Describe your work session..." : "Record your comment..."}
+                            className="flex-1 w-full p-2 bg-transparent resize-none focus:outline-none text-xs leading-relaxed text-foreground placeholder:text-muted-foreground overflow-y-auto"
+                            placeholder="Describe your session..."
                             value={overview}
                             onChange={(e) => setOverview(e.target.value)}
                         />
 
                         {/* Controls */}
-                        <div className="px-6 py-4 flex items-center justify-between bg-muted/20 border-t border-border mt-auto">
-                            <div className="flex items-center gap-3">
+                        <div className="px-3 py-2 flex items-center justify-between bg-muted/20 border-t border-border mt-auto">
+                            <div className="flex items-center gap-1.5">
                                 <Button
                                     variant={isRecording ? 'destructive' : 'primary'}
+                                    size="sm"
                                     onClick={handleToggleRecording}
-                                    className={isRecording ? 'animate-pulse' : ''}
+                                    className={`h-7 py-0 text-[10px] ${isRecording ? 'animate-pulse' : ''}`}
                                 >
-                                    <Mic size={16} className="mr-2" />
+                                    <Mic size={12} className="mr-1" />
                                     {isRecording ? "Stop" : "Record"}
                                 </Button>
 
                                 {isRecording && (
-                                    <div className="flex items-center gap-3 px-3 py-1.5 bg-background rounded-md border border-border shadow-inner">
-                                        <span className="text-sm font-mono text-foreground font-medium w-12">{formatTime(recordingTime)}</span>
-                                        <Waveform stream={stream} className="w-24 h-6" />
+                                    <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-background rounded border border-border shadow-inner h-7">
+                                        <span className="text-[10px] font-mono text-foreground font-medium w-8 text-center">{formatTime(recordingTime)}</span>
+                                        <Waveform stream={stream} className="w-16 h-4" />
                                     </div>
                                 )}
 
                                 {isProcessing && (
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/30 rounded-md">
-                                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
-                                        <span className="text-xs font-medium text-muted-foreground mr-1">AI Processing...</span>
+                                    <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-secondary/30 rounded h-7">
+                                        <div className="w-1 h-1 bg-primary rounded-full animate-bounce" />
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">AI Processing...</span>
                                     </div>
                                 )}
                             </div>
 
                             <Button
                                 variant="secondary"
+                                size="sm"
                                 onClick={handleManualGenerate}
                                 disabled={!overview || isProcessing}
+                                className="text-[9px] h-7 px-3 font-bold uppercase tracking-wider"
                             >
                                 Generate AI
                             </Button>
@@ -592,42 +581,41 @@ export default function TrackerPage() {
 
                     {/* Bottom: OUTPUT */}
                     <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                        <div className="flex items-center justify-between px-6 py-2 border-b border-border bg-muted/50">
-                            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">OUTPUT</h2>
+                        <div className="flex items-center justify-between px-3 py-1 bg-muted/50 border-b border-border">
+                            <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Output</h2>
                             <div className="flex items-center gap-2">
                                 {summary && (
-                                    <>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8"
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(summary);
-                                                setAlertMessage("Copied to clipboard!");
-                                            }}
-                                        >
-                                            <Copy size={16} />
-                                        </Button>
-                                    </>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(summary);
+                                            setAlertMessage("Copied!");
+                                        }}
+                                    >
+                                        <Copy size={11} />
+                                    </Button>
                                 )}
                             </div>
                         </div>
-                        <div className="flex-1 p-6 overflow-y-auto bg-background/50">
+                        <div className="flex-1 p-2 overflow-y-auto bg-background/50 text-xs">
                             {summary ? (
-                                <div className="prose prose-sm dark:prose-invert max-w-none">
+                                <div className="prose prose-xs dark:prose-invert max-w-none">
                                     <ReactMarkdown>{summary}</ReactMarkdown>
                                 </div>
                             ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
-                                    <p>Record audio or type above, then click Generate.</p>
+                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-[10px] text-center px-4 opacity-50">
+                                    <p>Record audio or type, then click Generate.</p>
                                 </div>
                             )}
                         </div>
 
                         {/* Footer Actions */}
-                        <div className="px-6 py-4 border-t border-border flex gap-4 bg-muted/20 mt-auto">
+                        <div className="px-3 py-2 border-t border-border flex gap-1.5 bg-muted/20 mt-auto">
                             <Button
-                                className="flex-1"
+                                className="flex-1 text-[9px] h-7 font-bold uppercase tracking-wider"
+                                size="sm"
                                 onClick={handleSaveStory}
                                 disabled={!summary || isProcessing}
                                 isLoading={isProcessing}
@@ -636,80 +624,80 @@ export default function TrackerPage() {
                             </Button>
                             <Button
                                 variant="outline"
-                                className="flex-1"
+                                className="flex-1 text-[9px] h-7 font-bold uppercase tracking-wider"
+                                size="sm"
                                 onClick={handleExport}
                                 disabled={!summary}
                             >
-                                <Download size={16} className="mr-2" />
+                                <Download size={11} className="mr-1" />
                                 Export (.md)
                             </Button>
                         </div>
                     </div>
                 </main>
 
-                {/* --- RIGHT SIDEBAR: COMMENTS --- */}
-                <aside className="w-80 flex flex-col gap-4">
-                    <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                        <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/30">
-                            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Comments</h2>
-                            <Button
-                                variant={activeTab === 'comment' && !selectedCommentId ? 'primary' : 'ghost'}
-                                size="icon"
-                                onClick={handleAddCommentClick}
-                                disabled={!selectedStoryId}
-                                title={selectedStoryId ? "Add Comment" : "Select a story first"}
-                            >
-                                <Plus size={18} />
-                            </Button>
-                        </div>
+                {/* --- RIGHT: COMMENTS --- */}
+                <aside className="w-64 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between px-3 py-1 bg-muted/50 border-b border-border">
+                        <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Comments</h2>
+                        <Button
+                            variant={activeTab === 'comment' && !selectedCommentId ? 'primary' : 'ghost'}
+                            size="icon"
+                            className="h-5 w-5"
+                            onClick={handleAddCommentClick}
+                            disabled={!selectedStoryId}
+                            title={selectedStoryId ? "Add Comment" : "Select a story first"}
+                        >
+                            <Plus size={12} />
+                        </Button>
+                    </div>
 
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                            {comments.length === 0 ? (
-                                <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">
-                                    {!selectedStoryId ? "Select a story to view comments" : "No comments yet"}
-                                </div>
-                            ) : comments.map(comment => (
-                                <div
-                                    key={comment.id}
-                                    onClick={() => handleSelectComment(comment)}
-                                    className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-all ${selectedCommentId === comment.id
-                                        ? "bg-primary/10 border border-primary/20 shadow-sm"
-                                        : "hover:bg-secondary border border-transparent"
-                                        }`}
-                                >
-                                    <div className="flex flex-col min-w-0 mr-3">
-                                        <div className="font-semibold text-xs text-foreground truncate" title={comment.output}>
-                                            {comment.output.slice(0, 50)}...
-                                        </div>
-                                        <span className="text-[10px] text-muted-foreground">
-                                            {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : 'Unknown'}
-                                        </span>
+                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
+                        {comments.length === 0 ? (
+                            <div className="text-center py-6 opacity-30 italic text-[10px] text-muted-foreground">
+                                {!selectedStoryId ? "Select a story" : "No comments yet"}
+                            </div>
+                        ) : comments.map(comment => (
+                            <div
+                                key={comment.id}
+                                onClick={() => handleSelectComment(comment)}
+                                className={`group flex items-center justify-between p-1.5 rounded cursor-pointer transition-all ${selectedCommentId === comment.id
+                                    ? "bg-primary/10 border border-primary/20 shadow-sm"
+                                    : "hover:bg-secondary border border-transparent"
+                                    }`}
+                            >
+                                <div className="flex flex-col min-w-0 mr-1.5">
+                                    <div className="font-semibold text-[10px] text-foreground truncate" title={comment.output}>
+                                        {comment.output.slice(0, 35)}...
                                     </div>
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigator.clipboard.writeText(comment.output);
-                                                setAlertMessage("Comment copied!");
-                                            }}
-                                        >
-                                            <Copy size={13} />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                            onClick={(e) => handleDeleteClick(comment.id!, e)}
-                                        >
-                                            <Trash2 size={13} />
-                                        </Button>
-                                    </div>
+                                    <span className="text-[8px] text-muted-foreground font-medium uppercase tracking-tighter">
+                                        {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : 'Unknown'}
+                                    </span>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigator.clipboard.writeText(comment.output);
+                                            setAlertMessage("Copied!");
+                                        }}
+                                    >
+                                        <Copy size={10} />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 text-destructive hover:bg-destructive/10"
+                                        onClick={(e) => handleDeleteClick(comment.id!, e)}
+                                    >
+                                        <Trash2 size={10} />
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </aside>
             </div>
@@ -720,12 +708,12 @@ export default function TrackerPage() {
                 onClose={() => setAlertMessage(null)}
                 title="Notification"
                 footer={
-                    <Button onClick={() => setAlertMessage(null)}>
+                    <Button onClick={() => setAlertMessage(null)} size="sm">
                         OK
                     </Button>
                 }
             >
-                <p className="py-4 text-center">{alertMessage}</p>
+                <p className="py-2 text-center text-sm">{alertMessage}</p>
             </Modal>
 
             <Modal
@@ -733,15 +721,17 @@ export default function TrackerPage() {
                 onClose={() => setPendingDeleteId(null)}
                 title="Confirm Deletion"
                 footer={
-                    <div className="flex gap-3">
+                    <div className="flex gap-2">
                         <Button
                             variant="ghost"
+                            size="sm"
                             onClick={() => setPendingDeleteId(null)}
                         >
                             Cancel
                         </Button>
                         <Button
                             variant="destructive"
+                            size="sm"
                             onClick={confirmDelete}
                         >
                             Delete
@@ -749,7 +739,7 @@ export default function TrackerPage() {
                     </div>
                 }
             >
-                <p className="py-4">Are you sure you want to permanently delete this item? This action cannot be undone.</p>
+                <p className="py-2 text-sm text-muted-foreground">Are you sure you want to permanently delete this item? This action cannot be undone.</p>
             </Modal>
         </div>
     );

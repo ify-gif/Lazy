@@ -36,12 +36,12 @@ export default function Home() {
 
       <main className="flex flex-col items-center max-w-2xl w-full gap-6 sm:gap-10">
         {/* Hero Image */}
-        <div className="w-full max-w-[420px] relative px-4">
+        <div className="w-full max-w-[640px] relative px-4">
           <Image
             src="./logo.png"
             alt="LaZy Logo"
-            width={500}
-            height={200}
+            width={700}
+            height={280}
             className="w-full h-auto drop-shadow-sm dark:drop-shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
             priority
           />

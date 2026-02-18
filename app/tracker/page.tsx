@@ -1,15 +1,14 @@
-"use client";
-
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-    ChevronLeft, Search, Mic, Play, Pause, Square,
-    Wand2, Save, FileOutput, Plus, Trash2, Calendar,
-    FileText, Activity, Copy, RotateCcw, Download
+    Search, Mic, Save, Plus, Trash2, Copy, Download
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
+import Button from "../components/Button";
+import { SearchInput } from "../components/Input";
+import { WorkStory, AIResponse } from "../../main/types";
 
 export default function TrackerPage() {
     const router = useRouter();
@@ -18,23 +17,22 @@ export default function TrackerPage() {
     const [activeTab, setActiveTab] = useState<'story' | 'comment'>('story');
     const [overview, setOverview] = useState("");
     const [summary, setSummary] = useState("");
-    const [jiraStory, setJiraStory] = useState<{ summary: string; description: string } | null>(null);
+    const [jiraStory, setJiraStory] = useState<AIResponse | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [stream, setStream] = useState<MediaStream | null>(null);
-    const [historyItems, setHistoryItems] = useState<any[]>([]);
-
-    const [audioBuffer, setAudioBuffer] = useState<ArrayBuffer | null>(null);
+    const [historyItems, setHistoryItems] = useState<WorkStory[]>([]);
 
     // Story-Comment Linking State
     const [selectedStoryId, setSelectedStoryId] = useState<number | null>(null);
     const [selectedCommentId, setSelectedCommentId] = useState<number | null>(null);
-    const [comments, setComments] = useState<any[]>([]);
+    const [comments, setComments] = useState<WorkStory[]>([]);
 
     // Modal State
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
@@ -47,9 +45,9 @@ export default function TrackerPage() {
     const animationFrameRef = useRef<number | null>(null);
 
     const loadHistory = async () => {
-        if (!(window as any).electron?.db) return;
+        if (!window.electron?.db) return;
         try {
-            const data = await (window as any).electron.db.getWorkStories();
+            const data = await window.electron.db.getWorkStories();
             setHistoryItems(data);
         } catch (err) {
             console.error("Failed to load history", err);
@@ -57,9 +55,9 @@ export default function TrackerPage() {
     };
 
     const loadComments = async (storyId: number) => {
-        if (!(window as any).electron?.db) return;
+        if (!window.electron?.db) return;
         try {
-            const data = await (window as any).electron.db.getComments(storyId);
+            const data = await window.electron.db.getComments(storyId);
             setComments(data);
         } catch (err) {
             console.error("Failed to load comments", err);
@@ -131,7 +129,7 @@ export default function TrackerPage() {
     const handleToggleRecording = async () => {
         if (!isRecording) {
             try {
-                const electron = (window as any).electron;
+                const electron = window.electron;
                 const selectedMic = await electron?.settings?.get("selectedMic");
                 const constraints = { audio: selectedMic ? { deviceId: { exact: selectedMic } } : true };
                 const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -151,7 +149,7 @@ export default function TrackerPage() {
                     // Silence Check: If max volume was < 10 (out of 255), drop it.
                     if (maxVolumeRef.current < 10) {
                         console.warn("Audio too quiet, dropping.");
-                        (window as any).electron?.settings?.sendStatus('ready', 'Ignored (Silence)');
+                        window.electron?.settings?.sendStatus('ready', 'Ignored (Silence)');
                         setStream(null);
                         mediaStream.getTracks().forEach(t => t.stop());
                         return;
@@ -167,38 +165,48 @@ export default function TrackerPage() {
                 recorder.start(1000);
                 setIsRecording(true);
                 setRecordingTime(0);
-                (window as any).electron?.settings?.sendStatus('recording', 'Recording...');
+                window.electron?.settings?.sendStatus('recording', 'Recording...');
             } catch (err) {
                 console.error("Recording failed", err);
-                (window as any).electron?.settings?.sendStatus('error', 'Recording Failed');
+                window.electron?.settings?.sendStatus('error', 'Recording Failed');
             }
         } else {
             mediaRecorderRef.current?.stop();
             setIsRecording(false);
-            (window as any).electron?.settings?.sendStatus('processing', 'Processing...');
+            window.electron?.settings?.sendStatus('processing', 'Processing...');
         }
     };
 
+    const handleNewSession = () => {
+        setOverview("");
+        setSummary("");
+        setJiraStory(null);
+        setSelectedStoryId(null);
+        setSelectedCommentId(null);
+        setComments([]);
+        setActiveTab('story');
+    };
+
     const processAudio = async (arrayBuffer: ArrayBuffer) => {
-        if (!(window as any).electron?.ai) return;
+        if (!window.electron?.ai) return;
         setIsProcessing(true);
-        (window as any).electron?.settings?.sendStatus('processing', 'Transcribing...');
+        window.electron?.settings?.sendStatus('processing', 'Transcribing...');
         try {
-            const transcript = await (window as any).electron.ai.transcribe(arrayBuffer);
+            const transcript = await window.electron.ai.transcribe(arrayBuffer);
             if (!transcript || transcript.startsWith("Error")) {
                 throw new Error(transcript || "Transcription failed");
             }
             setOverview(transcript);
 
-            (window as any).electron?.settings?.sendStatus('ready', 'Transcript Ready');
+            window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
         } catch (err: any) {
             console.error("AI Processing failed", err);
 
-            const msg = err.message || 'AI Failed';
+            const msg = (err.message as string) || 'AI Failed';
             if (msg.includes('API Key not found')) {
-                (window as any).electron?.settings?.sendStatus('error', 'NO API KEY');
+                window.electron?.settings?.sendStatus('error', 'NO API KEY');
             } else {
-                (window as any).electron?.settings?.sendStatus('error', 'AI FAILED');
+                window.electron?.settings?.sendStatus('error', 'AI FAILED');
             }
         } finally {
             setIsProcessing(false);
@@ -206,30 +214,30 @@ export default function TrackerPage() {
     };
 
     const handleManualGenerate = async () => {
-        if (!overview || !(window as any).electron?.ai) return;
+        if (!overview || !window.electron?.ai) return;
         setIsProcessing(true);
-        (window as any).electron?.settings?.sendStatus('processing', 'Generating...');
+        window.electron?.settings?.sendStatus('processing', 'Generating...');
         try {
             if (activeTab === 'story') {
                 // Returns { summary, description } where description is Markdown
-                const insight = await (window as any).electron.ai.generateStory(overview);
+                const insight = await window.electron.ai.generateStory(overview);
                 setJiraStory(insight);
                 setSummary(insight.description);
             } else {
-                const polished = await (window as any).electron.ai.polishComment(overview);
+                const polished = await window.electron.ai.polishComment(overview);
                 setSummary(polished);
             }
-            (window as any).electron?.settings?.sendStatus('ready', 'Ready');
+            window.electron?.settings?.sendStatus('ready', 'Ready');
         } catch (err) {
             console.error("Manual generate failed", err);
-            (window as any).electron?.settings?.sendStatus('error', 'Generation Failed');
+            window.electron?.settings?.sendStatus('error', 'Generation Failed');
         } finally {
             setIsProcessing(false);
         }
     };
 
     const handleSaveStory = async () => {
-        if (!summary || !(window as any).electron?.db) return;
+        if (!summary || !window.electron?.db) return;
         try {
             const output = jiraStory ? `SUMMARY: ${jiraStory.summary}\n\n${jiraStory.description}` : summary;
 
@@ -239,11 +247,11 @@ export default function TrackerPage() {
                 return;
             }
 
-            await (window as any).electron.db.saveWorkStory(
+            await window.electron.db.saveWorkStory(
                 activeTab,
                 overview,
                 output,
-                activeTab === 'comment' ? selectedStoryId : null
+                activeTab === 'comment' && selectedStoryId ? selectedStoryId : undefined
             );
 
             setAlertMessage(activeTab === 'story' ? "Story saved!" : "Comment saved!");
@@ -267,13 +275,13 @@ export default function TrackerPage() {
         let content = summary;
 
         // If we have a selected story, try to append comments
-        if (activeTab === 'story' && selectedStoryId) {
+        if (activeTab === 'story' && selectedStoryId && window.electron?.db) {
             try {
-                const comments = await (window as any).electron.db.getComments(selectedStoryId);
-                if (comments && comments.length > 0) {
+                const commentsList = await window.electron.db.getComments(selectedStoryId);
+                if (commentsList && commentsList.length > 0) {
                     content += "\n\n---\n\n### Comments\n\n";
-                    comments.forEach((c: any) => {
-                        content += `**${new Date(c.created_at).toLocaleString()}**\n\n${c.output}\n\n`;
+                    commentsList.forEach((c) => {
+                        content += `**${c.created_at ? new Date(c.created_at).toLocaleString() : 'Unknown'}**\n\n${c.output}\n\n`;
                     });
                 }
             } catch (err) {
@@ -292,20 +300,20 @@ export default function TrackerPage() {
         URL.revokeObjectURL(url);
     };
 
-    const handleExportItem = async (item: any, e: React.MouseEvent) => {
+    const handleExportItem = async (item: WorkStory, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!item.output) return;
+        if (!item.output || !window.electron?.db) return;
 
         let content = item.output;
 
         // If it's a story, fetch and append comments
-        if (item.type === 'story') {
+        if (item.type === 'story' && item.id) {
             try {
-                const comments = await (window as any).electron.db.getComments(item.id);
-                if (comments && comments.length > 0) {
+                const commentsList = await window.electron.db.getComments(item.id);
+                if (commentsList && commentsList.length > 0) {
                     content += "\n\n---\n\n### Comments\n\n";
-                    comments.forEach((c: any) => {
-                        content += `**${new Date(c.created_at).toLocaleString()}**\n\n${c.output}\n\n`;
+                    commentsList.forEach((c) => {
+                        content += `**${c.created_at ? new Date(c.created_at).toLocaleString() : 'Unknown'}**\n\n${c.output}\n\n`;
                     });
                 }
             } catch (err) {
@@ -317,7 +325,7 @@ export default function TrackerPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${item.type}_export_${new Date(item.created_at).toISOString().slice(0, 10)}.md`;
+        a.download = `${item.type}_export_${item.created_at ? new Date(item.created_at).toISOString().slice(0, 10) : 'unknown'}.md`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -331,11 +339,11 @@ export default function TrackerPage() {
         setTimeout(() => setAlertMessage(null), 2000);
     };
 
-    const handleSelectItem = (item: any) => {
+    const handleSelectItem = (item: WorkStory) => {
         // Since sidebar only shows stories now, we always switch to Story tab when clicking a sidebar item
         setActiveTab('story');
         setOverview(item.overview);
-        setSelectedStoryId(item.id);
+        setSelectedStoryId(item.id ?? null);
         setSelectedCommentId(null);
 
         let content = item.output;
@@ -369,9 +377,9 @@ export default function TrackerPage() {
         setSummary(content);
     };
 
-    const handleSelectComment = (comment: any) => {
+    const handleSelectComment = (comment: WorkStory) => {
         setActiveTab('comment');
-        setSelectedCommentId(comment.id);
+        setSelectedCommentId(comment.id ?? null);
         setOverview(comment.overview || "");
         setSummary(comment.output || "");
         setJiraStory(null);
@@ -392,14 +400,14 @@ export default function TrackerPage() {
     };
 
     const confirmDelete = async () => {
-        if (pendingDeleteId === null) return;
+        if (pendingDeleteId === null || !window.electron?.db) return;
         try {
-            await (window as any).electron.db.deleteItem('work_stories', pendingDeleteId);
+            await window.electron.db.deleteItem('work_stories', pendingDeleteId);
             loadHistory();
 
             // If we have a selected story, refresh comments (in case we deleted a comment)
             if (selectedStoryId) {
-                const refreshedComments = await (window as any).electron.db.getComments(selectedStoryId);
+                const refreshedComments = await window.electron.db.getComments(selectedStoryId);
                 setComments(refreshedComments);
             }
 
@@ -427,315 +435,322 @@ export default function TrackerPage() {
 
     return (
         <div className="flex h-screen flex-col bg-background text-foreground font-sans overflow-hidden">
-
             {/* --- TOP BRAND BAR --- */}
-            <div className="flex items-center justify-center pt-0 pb-0 -mt-2">
+            <div className="flex items-center justify-center py-2 border-b border-border bg-card/50">
                 <button
                     onClick={() => router.push('/')}
                     className="transition-opacity focus:outline-none cursor-pointer p-0 m-0 border-none bg-transparent"
                     title="Go Home"
                 >
                     <img
-                        src="./logo.png"
+                        src="/logo.png"
                         alt="LAZY Logo"
-                        className="h-28 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
+                        className="h-12 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
                     />
                 </button>
             </div>
 
-            <div className="flex-1 flex overflow-hidden p-4 pb-8 gap-4">
+            <div className="flex-1 flex overflow-hidden p-4 gap-4">
                 {/* --- SIDEBAR: HISTORY --- */}
-                <aside className="w-[280px] flex flex-col">
-                    <div className="flex-1 border border-border p-0.5 rounded-lg bg-card/10">
-                        <div className="h-full flex flex-col border border-border rounded-md bg-card overflow-hidden">
-                            <div className="px-4 py-2 border-b border-border bg-muted/50">
-                                <div className="relative">
-                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search stories..."
-                                        className="w-full bg-secondary border-2 border-input rounded-md py-2 pl-9 pr-3 text-sm focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground"
-                                    />
-                                </div>
+                <aside className="w-80 flex flex-col gap-4">
+                    <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                        <div className="p-4 border-b border-border flex flex-col gap-4 bg-muted/30">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">History</h2>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleNewSession}
+                                    title="New Session"
+                                >
+                                    <Plus size={18} />
+                                </Button>
                             </div>
+                            <SearchInput
+                                placeholder="Search sessions..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
 
-                            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                                {historyItems.length === 0 ? (
-                                    <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">No history yet</div>
-                                ) : historyItems.map(item => (
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {historyItems.length === 0 ? (
+                                <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">No history yet</div>
+                            ) : historyItems
+                                .filter(item => item.overview.toLowerCase().includes(searchQuery.toLowerCase()))
+                                .map(item => (
                                     <div
                                         key={item.id}
                                         onClick={() => handleSelectItem(item)}
-                                        className={`group flex items-center justify-between p-3 border-b border-border/60 cursor-pointer transition-all last:border-0 ${selectedStoryId === item.id
-                                            ? "bg-secondary border-primary/20 shadow-sm"
-                                            : "hover:bg-secondary/50 border-transparent hover:border-border"
+                                        className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-all ${selectedStoryId === item.id
+                                            ? "bg-primary/10 border border-primary/20 shadow-sm"
+                                            : "hover:bg-secondary border border-transparent"
                                             }`}
                                     >
                                         <div className="flex flex-col min-w-0 mr-3">
-                                            <div className="font-medium text-xs text-foreground truncate" title={item.overview}>
-                                                {item.overview.slice(0, 40)}...
+                                            <div className="font-semibold text-xs text-foreground truncate" title={item.overview}>
+                                                {item.overview || "Untitled Session"}
                                             </div>
                                             <span className="text-[10px] text-muted-foreground">
-                                                {new Date(item.created_at).toLocaleDateString()}
+                                                {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
                                             </span>
                                         </div>
 
-                                        <div className="flex items-center gap-1 transition-opacity">
-                                            <button
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7"
                                                 onClick={(e) => handleExportItem(item, e)}
-                                                className="relative z-10 flex items-center justify-center h-6 w-6 rounded-md border border-border text-muted-foreground hover:text-primary hover:bg-secondary hover:border-primary transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
-                                                title="Export Story"
+                                                title="Export"
                                             >
-                                                <Download size={13} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => handleDeleteClick(item.id, e)}
-                                                className="relative z-10 flex items-center justify-center h-6 w-6 rounded-md border border-border text-destructive/80 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-destructive"
-                                                title="Delete Story"
+                                                <Download size={14} />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                onClick={(e) => handleDeleteClick(item.id!, e)}
+                                                title="Delete"
                                             >
-                                                <Trash2 size={13} />
-                                            </button>
+                                                <Trash2 size={14} />
+                                            </Button>
                                         </div>
                                     </div>
                                 ))}
-                            </div>
                         </div>
                     </div>
                 </aside>
 
-                {/* --- CENTER: WORKBENCH (Shared 50/50) --- */}
-                <main className="flex-1 flex flex-col min-w-0 bg-background/50 gap-4 overflow-hidden">
-
-                    {/* Top: Workbench with Double Border */}
-                    <div className="flex-1 min-h-0 border border-border p-0.5 rounded-lg bg-card/10">
-                        <section className="h-full flex flex-col border border-border rounded-md bg-card overflow-hidden">
-                            <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/50">
-                                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                    {activeTab === 'story' ? 'Transcript' : 'Comment Transcript'}
-                                </h2>
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        onClick={() => {
-                                            // Reset session but keep selection context if meant for new story?
-                                            // Or is "New Session" meant to clear everything including selection?
-                                            // Let's assume it clears text but keeps selection if we are commenting.
-                                            // Actually, usually "New Session" implies starting a new Story.
-                                            setActiveTab('story');
-                                            setSelectedStoryId(null);
-                                            setComments([]);
-                                            setOverview("");
-                                            setSummary("");
-                                            setJiraStory(null);
-                                        }}
-                                        className="text-[10px] text-primary underline hover:text-primary/80 transition-all cursor-pointer active:scale-95"
+                {/* --- CENTER: WORKBENCH --- */}
+                <main className="flex-1 flex flex-col gap-4 overflow-hidden">
+                    <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                        <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/50">
+                            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                {activeTab === 'story' ? 'Transcript' : 'Comment Transcript'}
+                                <span className="ml-2 text-[10px] font-mono text-zinc-400">
+                                    {(overview || "").split(/\s+/).filter(w => w).length} words
+                                </span>
+                            </h2>
+                            <div className="flex items-center gap-2">
+                                {selectedStoryId && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleNewSession}
+                                        className="text-xs h-7"
                                     >
-                                        New Session
-                                    </button>
-                                    <span className="text-xs text-zinc-400 font-mono">
-                                        {(overview || "").split(/\s+/).filter(w => w).length} words
-                                    </span>
-                                </div>
+                                        New
+                                    </Button>
+                                )}
                             </div>
+                        </div>
 
-                            <textarea
-                                className="flex-1 w-full p-6 bg-transparent resize-none focus:outline-none text-base leading-relaxed text-foreground placeholder:text-muted-foreground overflow-y-auto"
-                                placeholder={activeTab === 'story' ? "Describe your work session..." : "Record your comment..."}
-                                value={overview}
-                                onChange={(e) => setOverview(e.target.value)}
-                            />
+                        <textarea
+                            className="flex-1 w-full p-6 bg-transparent resize-none focus:outline-none text-base leading-relaxed text-foreground placeholder:text-muted-foreground overflow-y-auto"
+                            placeholder={activeTab === 'story' ? "Describe your work session..." : "Record your comment..."}
+                            value={overview}
+                            onChange={(e) => setOverview(e.target.value)}
+                        />
 
-                            {/* Controls */}
-                            <div className="px-6 py-4 flex items-center justify-between bg-card border-t border-border mt-auto">
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        onClick={handleToggleRecording}
-                                        className={`flex items-center justify-center px-4 py-2 rounded-md text-sm font-semibold shadow-sm transition-all focus:outline-none cursor-pointer active:scale-95 ${isRecording
-                                            ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse"
-                                            : "bg-primary text-primary-foreground hover:bg-primary/90"
-                                            }`}
-                                    >
-                                        {isRecording ? "Stop Recording" : "Start Recording"}
-                                    </button>
+                        {/* Controls */}
+                        <div className="px-6 py-4 flex items-center justify-between bg-muted/20 border-t border-border mt-auto">
+                            <div className="flex items-center gap-3">
+                                <Button
+                                    variant={isRecording ? 'destructive' : 'primary'}
+                                    onClick={handleToggleRecording}
+                                    className={isRecording ? 'animate-pulse' : ''}
+                                >
+                                    <Mic size={16} className="mr-2" />
+                                    {isRecording ? "Stop" : "Record"}
+                                </Button>
 
-                                    {isRecording && (
-                                        <div className="flex items-center gap-3 px-3 py-1.5 bg-secondary/50 rounded-md border border-border">
-                                            <span className="text-sm font-mono text-foreground font-medium w-12">{formatTime(recordingTime)}</span>
-                                            <Waveform stream={stream} className="w-24 h-6" />
-                                        </div>
-                                    )}
-
-                                    {isProcessing && (
-                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/30 rounded-md border border-border">
-                                            <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
-                                            <span className="text-xs font-medium text-muted-foreground mr-1">AI Processing...</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={handleManualGenerate}
-                                        disabled={!overview || isProcessing}
-                                        className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 transition-all shadow-sm disabled:opacity-50 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
-                                    >
-                                        <span className="text-indigo-100 font-medium mr-1">Generate AI</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-
-                    {/* Bottom: OUTPUT (Shared 50/50) */}
-                    <div className="flex-1 min-h-0 border border-border p-0.5 rounded-lg bg-card/10">
-                        <section className="h-full flex flex-col bg-background border border-border rounded-md shadow-inner overflow-hidden">
-                            <div className="flex items-center justify-between px-6 py-2 border-b border-border bg-muted/50">
-                                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                    OUTPUT
-                                </h2>
-                            </div>
-                            <div className="flex-1 p-6 overflow-y-auto">
-                                {summary ? (
-                                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                                        <ReactMarkdown>{summary}</ReactMarkdown>
+                                {isRecording && (
+                                    <div className="flex items-center gap-3 px-3 py-1.5 bg-background rounded-md border border-border shadow-inner">
+                                        <span className="text-sm font-mono text-foreground font-medium w-12">{formatTime(recordingTime)}</span>
+                                        <Waveform stream={stream} className="w-24 h-6" />
                                     </div>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
-                                        <p>Record audio to generate a summary.</p>
+                                )}
+
+                                {isProcessing && (
+                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/30 rounded-md">
+                                        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+                                        <span className="text-xs font-medium text-muted-foreground mr-1">AI Processing...</span>
                                     </div>
                                 )}
                             </div>
 
-                            {/* Footer Actions (Refined) */}
-                            <div className="px-4 py-2 border-t border-border flex gap-6 bg-card mt-auto">
-                                <button
-                                    onClick={handleSaveStory}
-                                    disabled={!summary}
-                                    className="flex-1 flex items-center justify-center py-2 px-4 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 transition-all shadow-sm disabled:opacity-50 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
-                                >
-                                    {activeTab === 'story' ? 'Save Story' : 'Save Comment'}
-                                </button>
-                                <button
-                                    onClick={handleExport}
-                                    disabled={!summary}
-                                    className="flex-1 flex items-center justify-center py-2 px-4 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 transition-all shadow-sm disabled:opacity-50 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
-                                >
-                                    Export (.md)
-                                </button>
+                            <Button
+                                variant="secondary"
+                                onClick={handleManualGenerate}
+                                disabled={!overview || isProcessing}
+                            >
+                                Generate AI
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Bottom: OUTPUT */}
+                    <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                        <div className="flex items-center justify-between px-6 py-2 border-b border-border bg-muted/50">
+                            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">OUTPUT</h2>
+                            <div className="flex items-center gap-2">
+                                {summary && (
+                                    <>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(summary);
+                                                setAlertMessage("Copied to clipboard!");
+                                            }}
+                                        >
+                                            <Copy size={16} />
+                                        </Button>
+                                    </>
+                                )}
                             </div>
-                        </section>
+                        </div>
+                        <div className="flex-1 p-6 overflow-y-auto bg-background/50">
+                            {summary ? (
+                                <div className="prose prose-sm dark:prose-invert max-w-none">
+                                    <ReactMarkdown>{summary}</ReactMarkdown>
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
+                                    <p>Record audio or type above, then click Generate.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="px-6 py-4 border-t border-border flex gap-4 bg-muted/20 mt-auto">
+                            <Button
+                                className="flex-1"
+                                onClick={handleSaveStory}
+                                disabled={!summary || isProcessing}
+                                isLoading={isProcessing}
+                            >
+                                {activeTab === 'story' ? 'Save Story' : 'Save Comment'}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="flex-1"
+                                onClick={handleExport}
+                                disabled={!summary}
+                            >
+                                <Download size={16} className="mr-2" />
+                                Export (.md)
+                            </Button>
+                        </div>
                     </div>
                 </main>
 
-                {/* --- RIGHT SIDEBAR: COMMENTS with Double Border --- */}
-                <aside className="w-[280px] flex flex-col">
-                    <div className="flex-1 border border-border p-0.5 rounded-lg bg-card/10">
-                        <div className="h-full flex flex-col bg-card border border-border rounded-md overflow-hidden">
-                            <div className="px-6 py-3 border-b border-border flex items-center justify-between bg-muted/50">
-                                <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Comments</h2>
-                                <button
-                                    onClick={handleAddCommentClick}
-                                    disabled={!selectedStoryId}
-                                    className={`p-1.5 rounded-md border transition-colors cursor-pointer active:scale-90 shadow-sm ${selectedStoryId
-                                        ? (activeTab === 'comment' ? 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/50 dark:text-indigo-400 dark:border-indigo-800' : 'bg-white dark:bg-zinc-950 border-zinc-400 dark:border-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300')
-                                        : 'opacity-40 cursor-not-allowed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/30'
-                                        }`}
-                                    title={selectedStoryId ? "Add Comment" : "Select a story first"}
-                                >
-                                    <Plus size={16} />
-                                </button>
-                            </div>
+                {/* --- RIGHT SIDEBAR: COMMENTS --- */}
+                <aside className="w-80 flex flex-col gap-4">
+                    <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                        <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/30">
+                            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Comments</h2>
+                            <Button
+                                variant={activeTab === 'comment' && !selectedCommentId ? 'primary' : 'ghost'}
+                                size="icon"
+                                onClick={handleAddCommentClick}
+                                disabled={!selectedStoryId}
+                                title={selectedStoryId ? "Add Comment" : "Select a story first"}
+                            >
+                                <Plus size={18} />
+                            </Button>
+                        </div>
 
-                            <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                                {comments.length === 0 ? (
-                                    <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">
-                                        {!selectedStoryId ? "Select a story to view comments" : "No comments yet"}
-                                    </div>
-                                ) : comments.map(comment => (
-                                    <div
-                                        key={comment.id}
-                                        onClick={() => handleSelectComment(comment)}
-                                        className={`group flex items-center justify-between p-3 border-b border-border/60 cursor-pointer transition-all last:border-0 ${selectedCommentId === comment.id
-                                            ? "bg-secondary border-primary/20 shadow-sm"
-                                            : "hover:bg-secondary/50 border-transparent hover:border-border"
-                                            }`}
-                                    >
-                                        <div className="flex flex-col min-w-0 mr-3">
-                                            <div className="font-medium text-xs text-foreground truncate" title={comment.output}>
-                                                {comment.output.slice(0, 50)}...
-                                            </div>
-                                            <span className="text-[10px] text-muted-foreground">
-                                                {new Date(comment.created_at).toLocaleDateString()}
-                                            </span>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                            {comments.length === 0 ? (
+                                <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">
+                                    {!selectedStoryId ? "Select a story to view comments" : "No comments yet"}
+                                </div>
+                            ) : comments.map(comment => (
+                                <div
+                                    key={comment.id}
+                                    onClick={() => handleSelectComment(comment)}
+                                    className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-all ${selectedCommentId === comment.id
+                                        ? "bg-primary/10 border border-primary/20 shadow-sm"
+                                        : "hover:bg-secondary border border-transparent"
+                                        }`}
+                                >
+                                    <div className="flex flex-col min-w-0 mr-3">
+                                        <div className="font-semibold text-xs text-foreground truncate" title={comment.output}>
+                                            {comment.output.slice(0, 50)}...
                                         </div>
-                                        <div className="flex items-center gap-1 transition-opacity">
-                                            <button
-                                                onClick={(e) => handleCopyComment(comment.output, e)}
-                                                className="relative z-10 flex items-center justify-center h-6 w-6 rounded-md border border-border text-muted-foreground hover:text-primary hover:bg-secondary hover:border-primary transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
-                                                title="Copy Comment"
-                                            >
-                                                <Copy size={13} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => handleDeleteClick(comment.id, e)}
-                                                className="relative z-10 flex items-center justify-center h-6 w-6 rounded-md border border-border text-destructive/80 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-destructive"
-                                                title="Delete Comment"
-                                            >
-                                                <Trash2 size={13} />
-                                            </button>
-                                        </div>
+                                        <span className="text-[10px] text-muted-foreground">
+                                            {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : 'Unknown'}
+                                        </span>
                                     </div>
-                                ))}
-                            </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(comment.output);
+                                                setAlertMessage("Comment copied!");
+                                            }}
+                                        >
+                                            <Copy size={13} />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                            onClick={(e) => handleDeleteClick(comment.id!, e)}
+                                        >
+                                            <Trash2 size={13} />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </aside>
-
             </div>
 
             {/* --- MODALS --- */}
-            {alertMessage && (
-                <Modal
-                    isOpen={!!alertMessage}
-                    onClose={() => setAlertMessage(null)}
-                    title="Notification"
-                    footer={
-                        <button
-                            onClick={() => setAlertMessage(null)}
-                            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-                        >
-                            OK
-                        </button>
-                    }
-                >
-                    <p>{alertMessage}</p>
-                </Modal>
-            )}
+            <Modal
+                isOpen={!!alertMessage}
+                onClose={() => setAlertMessage(null)}
+                title="Notification"
+                footer={
+                    <Button onClick={() => setAlertMessage(null)}>
+                        OK
+                    </Button>
+                }
+            >
+                <p className="py-4 text-center">{alertMessage}</p>
+            </Modal>
 
-            {pendingDeleteId !== null && (
-                <Modal
-                    isOpen={pendingDeleteId !== null}
-                    onClose={() => setPendingDeleteId(null)}
-                    title="Confirm Deletion"
-                    footer={
-                        <>
-                            <button
-                                onClick={() => setPendingDeleteId(null)}
-                                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm font-medium hover:bg-destructive/90 transition-colors"
-                            >
-                                Delete
-                            </button>
-                        </>
-                    }
-                >
-                    <p>Are you sure you want to permanently delete this item?</p>
-                </Modal>
-            )}
+            <Modal
+                isOpen={pendingDeleteId !== null}
+                onClose={() => setPendingDeleteId(null)}
+                title="Confirm Deletion"
+                footer={
+                    <div className="flex gap-3">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setPendingDeleteId(null)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDelete}
+                        >
+                            Delete
+                        </Button>
+                    </div>
+                }
+            >
+                <p className="py-4">Are you sure you want to permanently delete this item? This action cannot be undone.</p>
+            </Modal>
         </div>
     );
 }

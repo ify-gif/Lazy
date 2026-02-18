@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import SettingsModal from "./components/SettingsModal";
 import UpdatePill from "./components/UpdatePill";
 import WelcomeGuide from "./components/WelcomeGuide";
+import Button from "./components/Button";
 
 export default function Home() {
   const router = useRouter();
@@ -48,19 +49,22 @@ export default function Home() {
 
         {/* Buttons */}
         <div className="flex gap-4 flex-wrap justify-center px-4">
-          <button
+          <Button
+            size="lg"
+            className="min-w-[200px]"
             onClick={() => router.push('/meeting')}
-            className="group relative overflow-hidden h-[48px] px-8 rounded-full border-2 border-zinc-300 dark:border-zinc-700 bg-card text-foreground font-medium text-sm sm:text-base transition-all hover:scale-105 hover:bg-muted dark:hover:bg-accent hover:border-primary dark:hover:border-primary active:scale-95 cursor-pointer shadow-sm"
           >
             Meeting Transcription
-          </button>
+          </Button>
 
-          <button
+          <Button
+            variant="outline"
+            size="lg"
+            className="min-w-[200px]"
             onClick={() => router.push('/tracker')}
-            className="group relative overflow-hidden h-[48px] px-8 rounded-full border-2 border-zinc-300 dark:border-zinc-700 bg-card text-foreground font-medium text-sm sm:text-base transition-all hover:scale-105 hover:bg-muted dark:hover:bg-accent hover:border-primary dark:hover:border-primary active:scale-95 cursor-pointer shadow-sm"
           >
             Work Tracker
-          </button>
+          </Button>
         </div>
       </main>
     </div>

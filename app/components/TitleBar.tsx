@@ -74,7 +74,12 @@ export default function TitleBar() {
         }
     };
 
-    const isMac = (window as any).electron?.platform === 'darwin';
+    const [isMac, setIsMac] = useState(false);
+
+    useEffect(() => {
+        setIsMac((window as any).electron?.platform === 'darwin');
+    }, []);
+
     const controls = (
         <div className={`flex bg-transparent app-region-no-drag ${isMac ? 'pl-2' : ''}`}>
             <button
@@ -121,7 +126,7 @@ export default function TitleBar() {
                 title="Go Home"
             >
                 <img
-                    src="./app_icon.png"
+                    src="/app_icon.png"
                     alt="App Logo"
                     className="w-4 h-4 object-contain"
                 />

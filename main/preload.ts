@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse } from './types';
 
 contextBridge.exposeInMainWorld('electron', {
     ipcRenderer: {
@@ -17,41 +18,41 @@ contextBridge.exposeInMainWorld('electron', {
     },
     settings: {
         setApiKey: (key: string) => ipcRenderer.send('set-api-key', key),
-        getApiKey: () => ipcRenderer.invoke('get-api-key'),
+        getApiKey: (): Promise<string> => ipcRenderer.invoke('get-api-key'),
         set: (key: string, value: string) => ipcRenderer.send('set-setting', { key, value }),
-        get: (key: string) => ipcRenderer.invoke('get-setting', key),
-        getVersion: () => ipcRenderer.invoke('get-app-version'),
-        sendStatus: (status: 'ready' | 'recording' | 'processing' | 'error', message?: string) => ipcRenderer.send('app-status-update', { status, message }),
-        onStatusChange: (callback: (data: { status: string, message?: string }) => void) => {
-            const subscription = (_event: any, data: any) => callback(data);
+        get: (key: string): Promise<string> => ipcRenderer.invoke('get-setting', key),
+        getVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+        sendStatus: (status: AppStatus, message?: string) => ipcRenderer.send('app-status-update', { status, message }),
+        onStatusChange: (callback: (data: StatusUpdate) => void) => {
+            const subscription = (_event: any, data: StatusUpdate) => callback(data);
             ipcRenderer.on('app-status-update', subscription);
             return () => ipcRenderer.removeListener('app-status-update', subscription);
         },
-        validateApiKey: (key: string) => ipcRenderer.invoke('ai-validate-key', key),
+        validateApiKey: (key: string): Promise<boolean> => ipcRenderer.invoke('ai-validate-key', key),
     },
     updates: {
         check: () => ipcRenderer.invoke('app-check-update'),
         download: () => ipcRenderer.invoke('app-download-update'),
         install: () => ipcRenderer.send('app-install-update'),
-        onUpdateEvent: (callback: (data: { event: string, data?: any }) => void) => {
-            const subscription = (_event: any, data: any) => callback(data);
+        onUpdateEvent: (callback: (data: UpdateEvent) => void) => {
+            const subscription = (_event: any, data: UpdateEvent) => callback(data);
             ipcRenderer.on('app-update-event', subscription);
             return () => ipcRenderer.removeListener('app-update-event', subscription);
         },
     },
     ai: {
-        transcribe: (buffer: ArrayBuffer) => ipcRenderer.invoke('ai-transcribe', buffer),
-        summarizeMeeting: (transcript: string) => ipcRenderer.invoke('ai-summarize-meeting', transcript),
-        generateStory: (overview: string) => ipcRenderer.invoke('ai-generate-story', overview),
-        polishComment: (comment: string) => ipcRenderer.invoke('ai-polish-comment', comment),
+        transcribe: (buffer: ArrayBuffer): Promise<string> => ipcRenderer.invoke('ai-transcribe', buffer),
+        summarizeMeeting: (transcript: string): Promise<string> => ipcRenderer.invoke('ai-summarize-meeting', transcript),
+        generateStory: (overview: string): Promise<AIResponse> => ipcRenderer.invoke('ai-generate-story', overview),
+        polishComment: (comment: string): Promise<string> => ipcRenderer.invoke('ai-polish-comment', comment),
     },
     db: {
-        saveMeeting: (title: string, transcript: string, summary: string) => ipcRenderer.invoke('db-save-meeting', { title, transcript, summary }),
-        getMeetings: () => ipcRenderer.invoke('db-get-meetings'),
-        saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number) => ipcRenderer.invoke('db-save-work-story', { type, overview, output, parentId }),
-        getWorkStories: () => ipcRenderer.invoke('db-get-work-stories'),
-        getComments: (storyId: number) => ipcRenderer.invoke('db-get-comments', storyId),
-        deleteItem: (table: 'meetings' | 'work_stories', id: number) => ipcRenderer.invoke('db-delete-item', { table, id }),
+        saveMeeting: (title: string, transcript: string, summary: string): Promise<number> => ipcRenderer.invoke('db-save-meeting', { title, transcript, summary }),
+        getMeetings: (): Promise<Meeting[]> => ipcRenderer.invoke('db-get-meetings'),
+        saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number): Promise<number> => ipcRenderer.invoke('db-save-work-story', { type, overview, output, parentId }),
+        getWorkStories: (): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-work-stories'),
+        getComments: (storyId: number): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-comments', storyId),
+        deleteItem: (table: 'meetings' | 'work_stories', id: number): Promise<void> => ipcRenderer.invoke('db-delete-item', { table, id }),
     },
     platform: process.platform
 });

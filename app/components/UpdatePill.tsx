@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { UpdateEvent } from '../../main/types';
+import Button from './Button';
 
 export default function UpdatePill() {
     const [version, setVersion] = useState<string>('v0.0.0');
@@ -19,9 +21,11 @@ export default function UpdatePill() {
 
     useEffect(() => {
         // Get initial version
-        (window as any).electron.settings.getVersion().then((v: string) => {
-            setVersion(`v${v}`);
-        });
+        if (window.electron?.settings) {
+            window.electron.settings.getVersion().then((v: string) => {
+                setVersion(`v${v}`);
+            });
+        }
 
         // Force "Ready" state after 5 seconds if still checking (common for dev/network delay)
         const checkTimeout = setTimeout(() => {
@@ -29,46 +33,52 @@ export default function UpdatePill() {
         }, 5000);
 
         // Listen for update events
-        const unsubscribe = (window as any).electron.updates.onUpdateEvent((data: { event: string, data?: any }) => {
-            console.log('Update Event:', data);
-            switch (data.event) {
-                case 'update-available':
-                    setStatus('update-available');
-                    setUpdateInfo(data.data);
-                    break;
-                case 'update-not-available':
-                    setStatus('ready');
-                    break;
-                case 'download-progress':
-                    setStatus('downloading');
-                    setProgress(data.data);
-                    break;
-                case 'update-downloaded':
-                    setStatus('ready');
-                    // We'll use this to trigger install click
-                    break;
-                case 'error':
-                    // In dev, errors are common. If checking failed, just say ready.
-                    setStatus('ready');
-                    break;
-            }
-        });
+        if (window.electron?.updates) {
+            const unsubscribe = window.electron.updates.onUpdateEvent((data: UpdateEvent) => {
+                console.log('Update Event:', data);
+                switch (data.event) {
+                    case 'update-available':
+                        setStatus('update-available');
+                        setUpdateInfo(data.data);
+                        break;
+                    case 'update-not-available':
+                        setStatus('ready');
+                        break;
+                    case 'download-progress':
+                        setStatus('downloading');
+                        if (typeof data.data === 'number') {
+                            setProgress(data.data);
+                        }
+                        break;
+                    case 'update-downloaded':
+                        setStatus('ready');
+                        // We'll use this to trigger install click
+                        break;
+                    case 'error':
+                        // In dev, errors are common. If checking failed, just say ready.
+                        setStatus('ready');
+                        break;
+                }
+            });
 
-        return () => {
-            unsubscribe();
-            clearTimeout(checkTimeout);
-        };
+            return () => {
+                unsubscribe();
+                clearTimeout(checkTimeout);
+            };
+        }
     }, []);
 
     const handleClick = async () => {
+        if (!window.electron?.updates) return;
+
         if (status === 'update-available') {
-            await (window as any).electron.updates.download();
+            await window.electron.updates.download();
         } else if (status === 'ready' && updateInfo) {
-            (window as any).electron.updates.install();
+            window.electron.updates.install();
         } else {
             // Manual check
             setStatus('checking');
-            await (window as any).electron.updates.check();
+            await window.electron.updates.check();
             // Reset timeout for manual check
             setTimeout(() => {
                 setStatus(prev => prev === 'checking' ? 'ready' : prev);
@@ -105,15 +115,21 @@ export default function UpdatePill() {
     };
 
     return (
-        <button
+        <Button
+            variant="ghost"
+            size="sm"
             onClick={handleClick}
             className={`
-                flex items-center gap-2 px-3 py-1 rounded-full border-2 text-[10px] font-bold tracking-wider uppercase transition-all duration-500 cursor-pointer active:scale-95
+                flex items-center gap-2 px-3 py-1 rounded-full border-2 text-[10px] font-bold tracking-wider uppercase transition-all duration-500 shadow-sm
                 ${getStatusStyles()}
             `}
             title={status === 'update-available' ? "Update Available - Click to Download" : "System Status"}
         >
-            {status === 'downloading' && <div className="h-1 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${progress}%` }} /></div>}
+            {status === 'downloading' && (
+                <div className="h-1 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden mr-1">
+                    <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${progress}%` }} />
+                </div>
+            )}
 
             <span>{getLabel()}</span>
 
@@ -135,6 +151,6 @@ export default function UpdatePill() {
                 .animate-breathe-purple { animation: breathe-purple 2s ease-in-out infinite; }
                 .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
             `}</style>
-        </button>
+        </Button>
     );
 }

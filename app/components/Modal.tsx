@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import Button from "./Button";
 
 interface ModalProps {
     isOpen: boolean;
@@ -14,6 +15,7 @@ export default function Modal({ isOpen, onClose, title, children, footer }: Moda
 
     useEffect(() => {
         setMounted(true);
+        return () => setMounted(false);
     }, []);
 
     if (!mounted || !isOpen) return null;
@@ -26,12 +28,14 @@ export default function Modal({ isOpen, onClose, title, children, footer }: Moda
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border">
                     <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={onClose}
-                        className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-secondary rounded-md"
+                        className="text-muted-foreground hover:text-foreground h-8 w-8"
                     >
-                        <X size={20} />
-                    </button>
+                        <X size={18} />
+                    </Button>
                 </div>
 
                 {/* Body */}

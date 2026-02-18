@@ -1,6 +1,6 @@
 {
   "name": "lazy-electron",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Strategic Consultant Second Brain",
   "author": "Ify Gold",
   "private": true,
@@ -11,7 +11,7 @@
   "build": {
     "appId": "com.ifygold.lazy",
     "productName": "LAZY",
-    "copyright": "Copyright \u00a9 2026 Ify Gold",
+    "copyright": "Copyright © 2026 Ify Gold",
     "directories": {
       "output": "release"
     },
@@ -66,6 +66,7 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "electron-log": "^5.4.3",
     "electron-updater": "^6.7.3",
     "lucide-react": "^0.564.0",
     "next": "16.1.6",
@@ -77,6 +78,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -90,5 +92,9 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "wait-on": "^9.0.4"
+  },
+  "overrides": {
+    "tar": "^7.5.7",
+    "glob": "^9.0.0"
   }
 }

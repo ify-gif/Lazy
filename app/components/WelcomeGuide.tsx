@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Sparkles, ArrowRight, X } from "lucide-react";
+import Button from "./Button";
 
 interface WelcomeGuideProps {
     onOpenSettings: () => void;
@@ -13,7 +14,7 @@ export default function WelcomeGuide({ onOpenSettings }: WelcomeGuideProps) {
 
     useEffect(() => {
         const checkApiKey = async () => {
-            const electron = (window as any).electron;
+            const electron = window.electron;
             if (electron?.settings) {
                 const key = await electron.settings.getApiKey();
                 if (!key || key.trim() === "") {
@@ -41,20 +42,23 @@ export default function WelcomeGuide({ onOpenSettings }: WelcomeGuideProps) {
 
                 <div className="h-4 w-[1px] bg-border mx-1" />
 
-                <button
+                <Button
+                    size="sm"
                     onClick={onOpenSettings}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-primary text-primary-foreground rounded-full text-[10px] font-bold hover:opacity-90 transition-all active:scale-95"
+                    className="h-7 px-3 bg-primary text-primary-foreground rounded-full text-[10px] font-bold hover:opacity-90 transition-all"
                 >
                     <span>Configure</span>
-                    <ArrowRight size={10} />
-                </button>
+                    <ArrowRight size={10} className="ml-1" />
+                </Button>
 
-                <button
+                <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setDismissed(true)}
-                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
                 >
                     <X size={12} />
-                </button>
+                </Button>
             </div>
         </div>
     );

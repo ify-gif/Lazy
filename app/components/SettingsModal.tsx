@@ -1,8 +1,9 @@
-"use client";
-
-import { X } from "lucide-react";
+import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useTheme } from "next-themes";
+import { UpdateEvent } from "../../main/types";
+import Button from "./Button";
+import Input from "./Input";
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -37,9 +38,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             getMicrophones();
 
             // Load Secure API Key
-            if ((window as any).electron?.settings) {
-                (window as any).electron.settings.getApiKey().then((v: string) => setApiKey(v));
-                (window as any).electron.settings.get("selectedMic").then((v: string) => {
+            if (window.electron?.settings) {
+                window.electron.settings.getApiKey().then((v: string) => setApiKey(v));
+                window.electron.settings.get("selectedMic").then((v: string) => {
                     if (v) setSelectedMic(v);
                 });
             } else {
@@ -143,9 +144,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     };
 
     const handleSave = () => {
-        if ((window as any).electron?.settings) {
-            (window as any).electron.settings.setApiKey(apiKey);
-            (window as any).electron.settings.set("selectedMic", selectedMic);
+        if (window.electron?.settings) {
+            window.electron.settings.setApiKey(apiKey);
+            window.electron.settings.set("selectedMic", selectedMic);
         } else {
             localStorage.setItem("selectedMic", selectedMic);
         }
@@ -158,14 +159,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         if (!apiKey) return;
         setKeyStatus('validating');
         try {
-            const isValid = await (window as any).electron?.settings?.validateApiKey(apiKey);
+            const isValid = await window.electron?.settings?.validateApiKey(apiKey);
             setKeyStatus(isValid ? 'valid' : 'invalid');
             if (isValid) {
                 // Auto-save on valid
-                (window as any).electron?.settings?.setApiKey(apiKey);
-                (window as any).electron?.settings?.sendStatus('ready', 'Ready');
+                window.electron?.settings?.setApiKey(apiKey);
+                window.electron?.settings?.sendStatus('ready', 'Ready');
             } else {
-                (window as any).electron?.settings?.sendStatus('error', 'Invalid Key');
+                window.electron?.settings?.sendStatus('error', 'Invalid Key');
             }
 
             // Reset status after 3s
@@ -180,7 +181,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setUpdateStatus("Checking...");
         setCheckStatus('checking');
         try {
-            const result = await (window as any).electron.updates.check();
+            const result = await window.electron.updates.check();
             if (!result || !result.updateInfo) {
                 setUpdateStatus("You are on the latest version.");
                 setIsUpdateAvailable(false);
@@ -201,7 +202,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setIsDownloading(true);
         setUpdateStatus("Downloading...");
         try {
-            await (window as any).electron.updates.download();
+            await window.electron.updates.download();
         } catch (err) {
             setUpdateStatus("Download failed.");
             setIsDownloading(false);
@@ -210,12 +211,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     };
 
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen || !window.electron?.updates) return;
 
-        const unsubscribe = (window as any).electron.updates.onUpdateEvent((data: { event: string, data?: any }) => {
+        const unsubscribe = window.electron.updates.onUpdateEvent((data: UpdateEvent) => {
             switch (data.event) {
                 case 'update-available':
-                    setUpdateStatus(`Version ${data.data.version} available.`);
+                    if (data.data?.version) {
+                        setUpdateStatus(`Version ${data.data.version} available.`);
+                    } else {
+                        setUpdateStatus("New version available.");
+                    }
                     setIsUpdateAvailable(true);
                     setCheckStatus('available');
                     break;
@@ -225,7 +230,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     setCheckStatus('idle');
                     break;
                 case 'download-progress':
-                    setUpdateStatus(`Downloading: ${Math.floor(data.data)}%`);
+                    if (typeof data.data === 'number') {
+                        setUpdateStatus(`Downloading: ${Math.floor(data.data)}%`);
+                    }
                     break;
                 case 'update-downloaded':
                     setUpdateStatus("Update ready to install.");
@@ -247,53 +254,61 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-[500px] bg-card border border-border rounded-lg shadow-xl animate-in zoom-in-95 duration-200">
+            <div className="w-[500px] bg-card border border-border rounded-lg shadow-xl animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden">
 
                 {/* Header - Centered */}
-                <div className="relative flex items-center justify-center px-6 py-4 border-b border-border">
-                    <h2 className="text-lg font-semibold text-foreground">Settings</h2>
-                    <button onClick={onClose} className="absolute right-6 text-muted-foreground hover:text-foreground transition-colors">
-                        <X size={20} />
-                    </button>
+                <div className="relative flex items-center justify-center px-6 py-4 border-b border-border bg-muted/30">
+                    <h2 className="text-lg font-bold text-foreground tracking-tight">Settings</h2>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onClose}
+                        className="absolute right-4 h-8 w-8 text-muted-foreground hover:text-foreground"
+                    >
+                        <X size={18} />
+                    </Button>
                 </div>
 
                 {/* Content */}
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-6 overflow-y-auto max-h-[80vh]">
 
                     {/* API Keys */}
-                    <div className="space-y-3">
-                        <label className="text-sm font-medium text-muted-foreground">OpenAI API Key</label>
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <Key size={14} /> AI Configuration
+                        </div>
                         <div className="flex gap-2">
-                            <input
+                            <Input
                                 type="password"
-                                placeholder="sk-..."
+                                placeholder="Enter OpenAI API Key (sk-...)"
                                 value={apiKey}
                                 onChange={(e) => { setApiKey(e.target.value); setKeyStatus('idle'); }}
-                                className="flex-1 px-3 py-2 bg-secondary border border-border rounded-md focus:ring-2 focus:ring-primary outline-none text-sm text-foreground transition-all"
+                                className="flex-1"
                             />
-                            <button
+                            <Button
                                 onClick={validateKey}
                                 disabled={keyStatus === 'validating' || !apiKey}
-                                className={`px-4 py-2 rounded-md text-xs font-semibold shadow-sm transition-all disabled:opacity-80 min-w-[80px] ${keyStatus === 'valid' ? "bg-green-600 text-white" :
-                                    keyStatus === 'invalid' ? "bg-destructive text-destructive-foreground" :
-                                        "bg-primary text-primary-foreground hover:bg-primary/90"
+                                className={`min-w-[100px] h-10 ${keyStatus === 'valid' ? "bg-green-600 hover:bg-green-700 text-white" :
+                                    keyStatus === 'invalid' ? "bg-destructive text-destructive-foreground" : ""
                                     }`}
+                                isLoading={keyStatus === 'validating'}
                             >
-                                {keyStatus === 'validating' ? "Checking..." :
-                                    keyStatus === 'valid' ? "Valid" :
-                                        keyStatus === 'invalid' ? "Invalid" : "Validate"}
-                            </button>
+                                {keyStatus === 'valid' ? "Valid" :
+                                    keyStatus === 'invalid' ? "Invalid" : "Validate"}
+                            </Button>
                         </div>
                     </div>
 
                     {/* Audio Device */}
-                    <div className="space-y-3">
-                        <label className="text-sm font-medium text-muted-foreground">Microphone</label>
-                        <div className="flex gap-2 min-w-0">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <MicIcon size={14} /> Audio Input
+                        </div>
+                        <div className="flex gap-2">
                             <select
                                 value={selectedMic}
                                 onChange={(e) => setSelectedMic(e.target.value)}
-                                className="flex-1 min-w-0 px-3 py-2 bg-secondary border border-border rounded-md focus:ring-2 focus:ring-primary outline-none text-sm text-foreground"
+                                className="flex-1 h-10 px-3 bg-secondary border border-border rounded-md focus:ring-2 focus:ring-primary outline-none text-sm text-foreground appearance-none cursor-pointer"
                             >
                                 {mics.map(mic => (
                                     <option key={mic.deviceId} value={mic.deviceId}>
@@ -302,42 +317,39 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 ))}
                                 {mics.length === 0 && <option>No microphones found</option>}
                             </select>
-                            <button
+                            <Button
                                 onClick={runQuickTest}
                                 disabled={testStatus !== 'idle' || mics.length === 0 || !selectedMic}
-                                className={`px-4 py-2 rounded-md text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px] ${testStatus === 'pass'
-                                    ? "bg-green-600 text-white"
-                                    : testStatus === 'fail'
-                                        ? "bg-destructive text-destructive-foreground"
-                                        : "bg-primary text-primary-foreground hover:bg-primary/90"
+                                className={`min-w-[100px] h-10 ${testStatus === 'pass' ? "bg-green-600 hover:bg-green-700 text-white" :
+                                    testStatus === 'fail' ? "bg-destructive text-destructive-foreground" : ""
                                     }`}
+                                isLoading={testStatus === 'running'}
                             >
-                                {testStatus === 'running' ? "Testing..." :
-                                    testStatus === 'pass' ? "Pass!" :
-                                        testStatus === 'fail' ? "Failed" : "Quick Test"}
-                            </button>
+                                {testStatus === 'pass' ? "Pass!" :
+                                    testStatus === 'fail' ? "Failed" : "Quick Test"}
+                            </Button>
                         </div>
 
                         {/* Audio Test Feedack */}
-                        {(testStatus !== 'idle') && (
-                            <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-200 pt-1">
+                        {testStatus !== 'idle' && (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
                                     <span className={
                                         testStatus === 'pass' ? "text-green-600 dark:text-green-400" :
                                             testStatus === 'fail' ? "text-destructive" :
-                                                "text-muted-foreground"
+                                                "text-primary"
                                     }>
                                         {testStatus === 'running' ? "Calibrating..." :
-                                            testStatus === 'pass' ? "Connection Good" :
+                                            testStatus === 'pass' ? "Connection Stable" :
                                                 "No Audio Detected"}
                                     </span>
-                                    {testStatus === 'running' && <span className="text-muted-foreground">{Math.round(volume)}%</span>}
+                                    {testStatus === 'running' && <span className="text-muted-foreground font-mono">{Math.round(volume)}%</span>}
                                 </div>
 
                                 {testStatus === 'running' && (
-                                    <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                                    <div className="h-2 w-full bg-secondary rounded-full overflow-hidden shadow-inner">
                                         <div
-                                            className="h-full bg-primary transition-all duration-75 ease-out rounded-full"
+                                            className="h-full bg-primary transition-all duration-75 ease-out rounded-full shadow-[0_0_8px_rgba(var(--primary),0.5)]"
                                             style={{ width: `${volume}%` }}
                                         />
                                     </div>
@@ -347,58 +359,62 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </div>
 
                     {/* Theme */}
-                    <div className="space-y-3">
-                        <label className="text-sm font-medium text-muted-foreground">Theme</label>
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <Smartphone size={14} /> Appearance
+                        </div>
                         <div className="flex gap-3">
-                            <button
+                            <Button
+                                variant={theme === "light" ? "primary" : "outline"}
                                 onClick={() => setTheme("light")}
-                                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all border ${theme === "light"
-                                    ? "bg-primary border-primary text-primary-foreground shadow-sm"
-                                    : "bg-secondary border-border text-muted-foreground hover:bg-muted/50"
-                                    }`}
+                                className="flex-1"
                             >
-                                Light
-                            </button>
-                            <button
+                                <Sun size={14} className="mr-2" /> Light
+                            </Button>
+                            <Button
+                                variant={theme === "dark" ? "primary" : "outline"}
                                 onClick={() => setTheme("dark")}
-                                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all border ${theme === "dark"
-                                    ? "bg-primary border-primary text-primary-foreground shadow-sm"
-                                    : "bg-secondary border-border text-muted-foreground hover:bg-muted/50"
-                                    }`}
+                                className="flex-1"
                             >
-                                Dark
-                            </button>
+                                <Moon size={14} className="mr-2" /> Dark
+                            </Button>
                         </div>
                     </div>
 
                     {/* Updates */}
-                    <div className="space-y-3 pt-2">
-                        <label className="text-sm font-medium text-muted-foreground transition-colors">System Update</label>
-                        <div className="flex items-center justify-between p-3 bg-secondary/50 border border-border rounded-md">
-                            <div className="flex flex-col gap-0.5">
-                                <span className="text-xs font-semibold text-foreground">{updateStatus}</span>
-                                <span className="text-[10px] text-muted-foreground">GitHub Public Channel</span>
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <Globe size={14} /> System
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-muted/20 border border-border rounded-lg">
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                                <span className="text-xs font-bold text-foreground truncate">{updateStatus}</span>
+                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Public Channel</span>
                             </div>
                             {isUpdateAvailable || checkStatus === 'available' ? (
-                                <button
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
                                     onClick={updateStatus.includes("ready") ? () => (window as any).electron.updates.install() : handleDownloadUpdate}
                                     disabled={isDownloading}
-                                    className="px-4 py-1.5 bg-destructive border border-destructive hover:bg-destructive/90 text-destructive-foreground text-[10px] font-bold uppercase tracking-wider rounded-full shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                                    className="px-4 py-1 animate-pulse"
                                 >
+                                    <RefreshCw size={12} className={`mr-1.5 ${isDownloading ? 'animate-spin' : ''}`} />
                                     {isDownloading ? "Downloading..." : updateStatus.includes("ready") ? "Restart Now" : "Download"}
-                                </button>
+                                </Button>
                             ) : (
-                                <button
+                                <Button
+                                    variant={checkStatus === 'uptodate' ? 'primary' : 'outline'}
+                                    size="sm"
                                     onClick={checkUpdates}
-                                    className={`px-4 py-1.5 border border-border text-[10px] font-bold uppercase tracking-wider rounded-full transition-all active:scale-95 min-w-[100px] ${checkStatus === 'uptodate' ? "bg-green-600 border-green-600 text-white" :
-                                            checkStatus === 'error' ? "bg-destructive border-destructive text-destructive-foreground" :
-                                                "bg-primary hover:bg-primary/90 text-primary-foreground"
+                                    className={`min-w-[120px] ${checkStatus === 'uptodate' ? "bg-green-600 hover:bg-green-700 text-white" :
+                                        checkStatus === 'error' ? "bg-destructive text-destructive-foreground" : ""
                                         }`}
+                                    isLoading={checkStatus === 'checking'}
                                 >
-                                    {checkStatus === 'checking' ? "Checking..." :
-                                        checkStatus === 'uptodate' ? "Up to date" :
-                                            checkStatus === 'error' ? "Try Again" : "Check Now"}
-                                </button>
+                                    {checkStatus === 'uptodate' ? "Up to date" :
+                                        checkStatus === 'error' ? "Try Again" : "Check Now"}
+                                </Button>
                             )}
                         </div>
                     </div>
@@ -406,9 +422,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 bg-muted/30 border-t border-border flex justify-end gap-3 rounded-b-lg">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md text-sm font-medium shadow-sm transition-colors">Save Changes</button>
+                <div className="p-4 bg-muted/40 border-t border-border flex justify-end gap-3">
+                    <Button variant="ghost" onClick={onClose} className="px-6">Cancel</Button>
+                    <Button onClick={handleSave} className="px-8 shadow-md">Save Changes</Button>
                 </div>
 
             </div>

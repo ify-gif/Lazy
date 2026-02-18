@@ -1,14 +1,14 @@
 import sqlite3 from 'sqlite3';
 import { app } from 'electron';
 import path from 'path';
-import fs from 'fs';
+import { Meeting, WorkStory } from './types';
 
 const dbPath = path.join(app.getPath('userData'), 'lazy_history.db');
 
 export const DBService = {
     db: null as sqlite3.Database | null,
 
-    init() {
+    init(): void {
         if (this.db) return;
 
         this.db = new sqlite3.Database(dbPath, (err) => {
@@ -21,10 +21,16 @@ export const DBService = {
         });
     },
 
-    createTables() {
-        this.db?.serialize(() => {
+    createTables(): void {
+        const db = this.db;
+        if (!db) {
+            console.error('DB not initialized');
+            return;
+        }
+
+        db.serialize(() => {
             // Meetings Table
-            this.db?.run(`
+            db.run(`
                 CREATE TABLE IF NOT EXISTS meetings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
@@ -36,7 +42,7 @@ export const DBService = {
 
             // Work Stories Table
             // Using ALTER TABLE for non-destructive migration in dev
-            this.db?.run(`
+            db.run(`
                 CREATE TABLE IF NOT EXISTS work_stories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     type TEXT NOT NULL, -- 'story' or 'comment'
@@ -48,7 +54,7 @@ export const DBService = {
             `);
 
             // Attempt to add parent_id if it doesn't exist (for existing DBs)
-            this.db?.run(`ALTER TABLE work_stories ADD COLUMN parent_id INTEGER`, (err) => {
+            db.run(`ALTER TABLE work_stories ADD COLUMN parent_id INTEGER`, (err) => {
                 // Ignore error if column already exists
             });
         });
@@ -56,8 +62,10 @@ export const DBService = {
 
     // Meetings
     async saveMeeting(title: string, transcript: string, summary: string): Promise<number> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
-            this.db?.run(
+            db.run(
                 'INSERT INTO meetings (title, transcript, summary) VALUES (?, ?, ?)',
                 [title, transcript, summary],
                 function (err) {
@@ -68,14 +76,16 @@ export const DBService = {
         });
     },
 
-    async getMeetings(limit = 50): Promise<any[]> {
+    async getMeetings(limit = 50): Promise<Meeting[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
-            this.db?.all(
+            db.all(
                 'SELECT * FROM meetings ORDER BY created_at DESC LIMIT ?',
                 [limit],
                 (err, rows) => {
                     if (err) reject(err);
-                    else resolve(rows);
+                    else resolve(rows as Meeting[]);
                 }
             );
         });
@@ -83,8 +93,10 @@ export const DBService = {
 
     // Work Stories
     async saveWorkStory(type: 'story' | 'comment', overview: string, output: string, parentId?: number): Promise<number> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
-            this.db?.run(
+            db.run(
                 'INSERT INTO work_stories (type, overview, output, parent_id) VALUES (?, ?, ?, ?)',
                 [type, overview, output, parentId || null],
                 function (err) {
@@ -95,37 +107,43 @@ export const DBService = {
         });
     },
 
-    async getWorkStories(limit = 50): Promise<any[]> {
+    async getWorkStories(limit = 50): Promise<WorkStory[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
             // Only fetch top-level stories (where parent_id is NULL or type is 'story')
             // Actually, we just want 'story' types here.
-            this.db?.all(
+            db.all(
                 "SELECT * FROM work_stories WHERE type = 'story' ORDER BY created_at DESC LIMIT ?",
                 [limit],
                 (err, rows) => {
                     if (err) reject(err);
-                    else resolve(rows);
+                    else resolve(rows as WorkStory[]);
                 }
             );
         });
     },
 
-    async getCommentsHelper(storyId: number): Promise<any[]> {
+    async getCommentsHelper(storyId: number): Promise<WorkStory[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
-            this.db?.all(
+            db.all(
                 "SELECT * FROM work_stories WHERE type = 'comment' AND parent_id = ? ORDER BY created_at ASC",
                 [storyId],
                 (err, rows) => {
                     if (err) reject(err);
-                    else resolve(rows);
+                    else resolve(rows as WorkStory[]);
                 }
             );
         });
     },
 
     async deleteItem(table: 'meetings' | 'work_stories', id: number): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
-            this.db?.run(`DELETE FROM ${table} WHERE id = ?`, [id], (err) => {
+            db.run(`DELETE FROM ${table} WHERE id = ?`, [id], (err) => {
                 if (err) reject(err);
                 else resolve();
             });

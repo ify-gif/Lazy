@@ -1,11 +1,12 @@
-"use client";
-
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { History, Save, Copy, RotateCcw, Download, Wand2, Trash2 } from "lucide-react";
+import { History, Save, Copy, Download, Trash2, Mic } from "lucide-react";
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
+import Button from "../components/Button";
+import Input from "../components/Input";
+import ReactMarkdown from 'react-markdown';
+import { Meeting } from "../../main/types";
 
 export default function MeetingPage() {
     const router = useRouter();
@@ -17,7 +18,7 @@ export default function MeetingPage() {
     const [summary, setSummary] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const [historyItems, setHistoryItems] = useState<any[]>([]);
+    const [historyItems, setHistoryItems] = useState<Meeting[]>([]);
     const [showHistory, setShowHistory] = useState(false);
     const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
 
@@ -26,9 +27,9 @@ export default function MeetingPage() {
     const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
     const loadHistory = async () => {
-        if (!(window as any).electron?.db) return;
+        if (!window.electron?.db) return;
         try {
-            const data = await (window as any).electron.db.getMeetings();
+            const data = await window.electron.db.getMeetings();
             setHistoryItems(data);
         } catch (err) {
             console.error("Failed to load meeting history", err);
@@ -39,11 +40,11 @@ export default function MeetingPage() {
         loadHistory();
     }, []);
 
-    const handleSelectMeeting = (item: any) => {
+    const handleSelectMeeting = (item: Meeting) => {
         setTitle(item.title);
         setTranscript(item.transcript);
         setSummary(item.summary);
-        setSelectedMeetingId(item.id);
+        setSelectedMeetingId(item.id ?? null);
     };
 
     const handleDeleteClick = (id: number, e: React.MouseEvent) => {
@@ -54,7 +55,7 @@ export default function MeetingPage() {
     const confirmDelete = async () => {
         if (pendingDeleteId === null) return;
         try {
-            await (window as any).electron.db.deleteItem('meetings', pendingDeleteId);
+            await window.electron.db.deleteItem('meetings', pendingDeleteId);
             if (selectedMeetingId === pendingDeleteId) {
                 setSelectedMeetingId(null);
                 setTitle("");
@@ -141,7 +142,7 @@ export default function MeetingPage() {
             }
 
             try {
-                const electron = (window as any).electron;
+                const electron = window.electron;
                 const selectedMic = await electron?.settings?.get("selectedMic");
                 const constraints = {
                     audio: selectedMic ? { deviceId: { exact: selectedMic } } : true
@@ -167,7 +168,7 @@ export default function MeetingPage() {
                     // Silence Check
                     if (maxVolumeRef.current < 10) {
                         console.warn("Audio too quiet, dropping.");
-                        (window as any).electron?.settings?.sendStatus('ready', 'Ignored (Silence)');
+                        window.electron?.settings?.sendStatus('ready', 'Ignored (Silence)');
                         setStream(null);
                         mediaStream.getTracks().forEach(t => t.stop());
                         return;
@@ -187,46 +188,46 @@ export default function MeetingPage() {
                 setRecordingTime(0);
             } catch (err) {
                 console.error("Recording failed to start", err);
-                (window as any).electron?.settings?.sendStatus('error', 'Recording failed');
+                window.electron?.settings?.sendStatus('error', 'Recording failed');
             }
         } else {
             mediaRecorderRef.current?.stop();
             setIsRecording(false);
-            (window as any).electron?.settings?.sendStatus('processing', 'Processing Audio...');
+            window.electron?.settings?.sendStatus('processing', 'Processing Audio...');
         }
     };
 
     const processAudio = async (arrayBuffer: ArrayBuffer) => {
-        if (!(window as any).electron?.ai) return;
+        if (!window.electron?.ai) return;
 
         setIsProcessing(true);
-        (window as any).electron?.settings?.sendStatus('processing', 'Transcribing...');
+        window.electron?.settings?.sendStatus('processing', 'Transcribing...');
         try {
             // 1. Transcribe (Whisper)
-            const text = await (window as any).electron.ai.transcribe(arrayBuffer);
+            const text = await window.electron.ai.transcribe(arrayBuffer);
             setTranscript(text);
 
-            (window as any).electron?.settings?.sendStatus('ready', 'Transcript Ready');
+            window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
         } catch (err: any) {
             console.error("AI Processing failed", err);
             setTranscript("Error: " + err.message);
 
-            const msg = err.message || 'AI Failed';
+            const msg = (err.message as string) || 'AI Failed';
             if (msg.includes('API Key not found')) {
-                (window as any).electron?.settings?.sendStatus('error', 'NO API KEY');
+                window.electron?.settings?.sendStatus('error', 'NO API KEY');
             } else if (msg.includes('Whisper API failed')) {
-                (window as any).electron?.settings?.sendStatus('error', 'WHISPER API ERROR');
+                window.electron?.settings?.sendStatus('error', 'WHISPER API ERROR');
             } else {
-                (window as any).electron?.settings?.sendStatus('error', 'AI FAILED');
+                window.electron?.settings?.sendStatus('error', 'AI FAILED');
             }
         } finally {
             setIsProcessing(false);
             // Reset to ready if not error
-            (window as any).electron?.settings?.sendStatus('ready', 'Ready');
+            window.electron?.settings?.sendStatus('ready', 'Ready');
         }
     };
 
-    const handleExportItem = (item: any, e: React.MouseEvent) => {
+    const handleExportItem = (item: Meeting, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!item.summary) return;
         const blob = new Blob([item.summary], { type: 'text/markdown' });
@@ -241,282 +242,276 @@ export default function MeetingPage() {
     };
 
     return (
-        <div className="flex h-screen flex-col bg-background text-foreground overflow-hidden font-sans">
-
+        <div className="flex h-screen flex-col bg-background text-foreground font-sans overflow-hidden">
             {/* --- TOP BRAND BAR --- */}
-            <div className="flex items-center justify-center pt-0 pb-0 -mt-2">
+            <div className="flex items-center justify-center py-2 border-b border-border bg-card/50">
                 <button
                     onClick={() => router.push('/')}
                     className="transition-opacity focus:outline-none cursor-pointer p-0 m-0 border-none bg-transparent"
                     title="Go Home"
                 >
                     <img
-                        src="./logo.png"
+                        src="/logo.png"
                         alt="LAZY Logo"
-                        className="h-28 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
+                        className="h-12 w-auto object-contain dark:filter dark:grayscale dark:brightness-0 dark:invert-[1]"
                     />
                 </button>
             </div>
 
             {/* --- ACTIONS HEADER --- */}
-            <header className="flex items-center justify-between px-8 py-0 bg-background">
-                <div className="flex-1 flex items-center gap-6 min-w-0">
-                    <div className="flex items-center gap-3">
-                        <input
-                            type="text"
-                            placeholder="Meeting Title..."
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="bg-secondary border-2 border-input rounded-md px-3 py-1.5 w-80 focus:outline-none focus:ring-1 focus:ring-ring text-sm font-medium"
-                        />
+            <header className="flex items-center justify-between px-8 py-4 bg-muted/20 border-b border-border">
+                <div className="flex items-center gap-6 min-w-0">
+                    <Input
+                        placeholder="Meeting Title..."
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="w-80"
+                    />
 
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={handleToggleRecording}
-                                className={`flex items-center justify-center px-4 py-1.5 rounded-md text-sm font-semibold shadow-sm transition-all focus:outline-none cursor-pointer active:scale-95 ${isRecording
-                                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse"
-                                    : "bg-primary text-primary-foreground hover:bg-primary/90"
-                                    }`}
-                            >
-                                {isRecording ? "Stop Recording" : "Start Recording"}
-                            </button>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant={isRecording ? 'destructive' : 'primary'}
+                            onClick={handleToggleRecording}
+                            className={isRecording ? 'animate-pulse' : ''}
+                        >
+                            <Mic size={16} className="mr-2" />
+                            {isRecording ? "Stop Recording" : "Start Recording"}
+                        </Button>
 
-                            {isRecording && (
-                                <div className="flex items-center gap-3 px-3 py-1.5 bg-secondary/50 rounded-md border border-border">
-                                    <span className="text-sm font-mono text-foreground font-medium w-12">{formatTime(recordingTime)}</span>
-                                    <Waveform stream={stream} className="w-24 h-6" />
-                                </div>
-                            )}
+                        {isRecording && (
+                            <div className="flex items-center gap-3 px-3 py-1.5 bg-background rounded-md border border-border shadow-inner">
+                                <span className="text-sm font-mono text-foreground font-medium w-12">{formatTime(recordingTime)}</span>
+                                <Waveform stream={stream} className="w-24 h-6" />
+                            </div>
+                        )}
 
-                            {isProcessing && (
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/30 rounded-md border border-border">
-                                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
-                                    <span className="text-xs font-medium text-muted-foreground">AI Processing...</span>
-                                </div>
-                            )}
-                        </div>
+                        {isProcessing && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/30 rounded-md">
+                                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+                                <span className="text-xs font-medium text-muted-foreground mr-1">AI Processing...</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
-
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className={`px-4 py-1.5 text-sm font-medium rounded-md shadow-sm transition-all cursor-pointer active:scale-95 ${showHistory ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground hover:opacity-90'}`}
-                        title="View History">
-                        {showHistory ? 'Hide History' : 'History'}
-                    </button>
-                </div>
+                <Button
+                    variant={showHistory ? 'secondary' : 'outline'}
+                    onClick={() => setShowHistory(!showHistory)}
+                    title="View History"
+                >
+                    {showHistory ? 'Hide History' : 'History'}
+                </Button>
             </header>
 
             {/* --- CONTENT --- */}
-            <main className="flex-1 flex overflow-hidden p-4 pb-8 gap-4">
+            <main className="flex-1 flex overflow-hidden p-4 gap-4">
 
                 {/* HISTORY SIDEBAR */}
                 {showHistory && (
-                    <aside className="w-[280px] flex flex-col min-w-[280px]">
-                        <div className="flex-1 border border-border p-0.5 rounded-lg bg-card/10">
-                            <div className="h-full flex flex-col border border-border rounded-md bg-card overflow-hidden">
-                                <div className="px-4 py-2 border-b border-border bg-muted/50">
-                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Saved Meetings</h3>
-                                </div>
-                                <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                                    {historyItems.length === 0 ? (
-                                        <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground p-4">No meetings yet</div>
-                                    ) : historyItems.map(item => (
-                                        <div
-                                            key={item.id}
-                                            onClick={() => handleSelectMeeting(item)}
-                                            className={`group flex items-center justify-between p-3 border-b border-border/60 cursor-pointer transition-all last:border-0 ${selectedMeetingId === item.id
-                                                ? "bg-secondary border-primary/20 shadow-sm"
-                                                : "hover:bg-secondary/50 border-transparent hover:border-border"
-                                                }`}
-                                        >
-                                            <div className="flex flex-col min-w-0 mr-3">
-                                                <div className="font-medium text-xs text-foreground truncate" title={item.title || "Untitled"}>
-                                                    {item.title || "Untitled"}
-                                                </div>
-                                                <span className="text-[10px] text-muted-foreground">
-                                                    {new Date(item.created_at).toLocaleDateString()}
-                                                </span>
+                    <aside className="w-80 flex flex-col min-w-[280px]">
+                        <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                            <div className="px-4 py-3 border-b border-border bg-muted/50">
+                                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest text-center flex items-center justify-center gap-2">
+                                    <History size={14} /> Saved Meetings
+                                </h3>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {historyItems.length === 0 ? (
+                                    <div className="text-center py-10 opacity-30 italic text-sm text-muted-foreground">No meetings yet</div>
+                                ) : historyItems.map(item => (
+                                    <div
+                                        key={item.id}
+                                        onClick={() => handleSelectMeeting(item)}
+                                        className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-all ${selectedMeetingId === item.id
+                                            ? "bg-primary/10 border border-primary/20 shadow-sm"
+                                            : "hover:bg-secondary border border-transparent"
+                                            }`}
+                                    >
+                                        <div className="flex flex-col min-w-0 mr-3">
+                                            <div className="font-semibold text-xs text-foreground truncate" title={item.title || "Untitled"}>
+                                                {item.title || "Untitled"}
                                             </div>
-
-                                            <div className="flex items-center gap-1 transition-opacity">
-                                                <button
-                                                    onClick={(e) => handleExportItem(item, e)}
-                                                    className="relative z-10 flex items-center justify-center h-6 w-6 rounded-md border border-border text-muted-foreground hover:text-primary hover:bg-secondary hover:border-primary transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
-                                                    title={item.summary ? "Export Markdown" : "No summary to export"}
-                                                    disabled={!item.summary}
-                                                >
-                                                    <Download size={13} className={!item.summary ? "opacity-50" : ""} />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => handleDeleteClick(item.id, e)}
-                                                    className="relative z-10 flex items-center justify-center h-6 w-6 rounded-md border border-border text-destructive/80 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-destructive"
-                                                    title="Delete Meeting"
-                                                >
-                                                    <Trash2 size={13} />
-                                                </button>
-                                            </div>
+                                            <span className="text-[10px] text-muted-foreground">
+                                                {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
+
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                onClick={(e) => handleExportItem(item, e)}
+                                                disabled={!item.summary}
+                                                title="Export"
+                                            >
+                                                <Download size={14} />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                onClick={(e) => handleDeleteClick(item.id!, e)}
+                                                title="Delete"
+                                            >
+                                                <Trash2 size={14} />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </aside>
                 )}
 
                 {/* Left: Transcript (60%) */}
-                <div className="flex-[1.5] flex flex-col min-w-0 border border-border p-0.5 rounded-lg bg-card/10">
-                    <section className="h-full flex flex-col border border-border rounded-md min-w-0 bg-card overflow-hidden">
-                        <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/50">
-                            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                Transcript
-                            </h2>
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => { setTranscript(""); setSummary(""); setTitle(""); setRecordingTime(0); setSelectedMeetingId(null); }}
-                                    className="text-xs text-primary underline hover:text-primary/80 transition-all cursor-pointer active:scale-95"
-                                >
-                                    Clear / New Session
-                                </button>
-                                <span className="text-xs text-muted-foreground font-mono">
-                                    {(transcript || "").split(/\s+/).filter(w => w).length} words
-                                </span>
-                            </div>
+                <div className="flex-[1.5] flex flex-col min-w-0 border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/50">
+                        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Transcript
+                        </h2>
+                        <div className="flex items-center gap-4">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => { setTranscript(""); setSummary(""); setTitle(""); setRecordingTime(0); setSelectedMeetingId(null); }}
+                                className="text-xs h-7"
+                            >
+                                Clear / New
+                            </Button>
+                            <span className="text-xs text-muted-foreground font-mono">
+                                {(transcript || "").split(/\s+/).filter(w => w).length} words
+                            </span>
                         </div>
+                    </div>
 
-                        <div className="flex-1 p-6 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                            {transcript || (
-                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
-                                    <p>Your transcription will appear here as you speak.</p>
-                                </div>
-                            )}
-                        </div>
-                    </section>
+                    <div className="flex-1 p-6 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed bg-background/50">
+                        {transcript || (
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
+                                <p>Your transcription will appear here as you speak.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Right: Summary (40%) */}
-                <div className="flex-1 flex flex-col min-w-0 border border-border p-0.5 rounded-lg bg-card/10">
-                    <section className="h-full flex flex-col bg-card border border-border rounded-md overflow-hidden">
-                        <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/50">
-                            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                OUTPUT
-                            </h2>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    className="flex items-center gap-1.5 px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:opacity-90 transition-all shadow-sm disabled:opacity-50 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
-                                    onClick={async () => {
-                                        if (!transcript) return;
-                                        setIsProcessing(true);
-                                        (window as any).electron?.settings?.sendStatus('processing', 'Summarizing...');
-                                        try {
-                                            const summaryResult = await (window as any).electron.ai.summarizeMeeting(transcript);
-                                            setSummary(summaryResult);
-                                            (window as any).electron?.settings?.sendStatus('ready', 'Ready');
-                                        } catch (err: any) {
-                                            console.error("Summary failed", err);
-                                            (window as any).electron?.settings?.sendStatus('error', 'Summary Failed');
-                                        } finally {
-                                            setIsProcessing(false);
-                                        }
-                                    }}
-                                    disabled={!transcript || isProcessing}
-                                >
-                                    Generate
-                                </button>
-                                <button
-                                    className="p-1.5 text-xs border border-border text-primary rounded hover:bg-secondary transition-all cursor-pointer active:scale-95"
-                                    onClick={async () => {
-                                        if (!transcript || !summary) return;
-                                        try {
-                                            // Pass separate arguments as expected by preload.ts
-                                            await (window as any).electron.db.saveMeeting(
-                                                title || "Untitled Meeting",
-                                                transcript,
-                                                summary
-                                            );
-                                            setAlertMessage("Meeting saved successfully!");
-                                            loadHistory(); // Refresh sidebar
-                                        } catch (err) {
-                                            console.error("Failed to save meeting", err);
-                                        }
-                                    }}
-                                    title="Save Meeting"
-                                >
-                                    <Save size={14} />
-                                </button>
-                                <button
-                                    className="p-1.5 text-xs border border-border text-primary rounded hover:bg-secondary transition-all cursor-pointer active:scale-95"
-                                    onClick={() => navigator.clipboard.writeText(summary)}
-                                    title="Copy to Clipboard"
-                                >
-                                    <Copy size={14} />
-                                </button>
+                <div className="flex-1 flex flex-col min-w-0 border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/50">
+                        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            OUTPUT
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={async () => {
+                                    if (!transcript || !window.electron?.ai) return;
+                                    setIsProcessing(true);
+                                    window.electron.settings.sendStatus('processing', 'Summarizing...');
+                                    try {
+                                        const summaryResult = await window.electron.ai.summarizeMeeting(transcript);
+                                        setSummary(summaryResult);
+                                        window.electron.settings.sendStatus('ready', 'Ready');
+                                    } catch (err) {
+                                        console.error("Summary failed", err);
+                                        window.electron.settings.sendStatus('error', 'Summary Failed');
+                                    } finally {
+                                        setIsProcessing(false);
+                                    }
+                                }}
+                                disabled={!transcript || isProcessing}
+                                isLoading={isProcessing}
+                            >
+                                Generate
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={async () => {
+                                    if (!transcript || !summary || !window.electron?.db) return;
+                                    try {
+                                        await window.electron.db.saveMeeting(
+                                            title || "Untitled Meeting",
+                                            transcript,
+                                            summary
+                                        );
+                                        setAlertMessage("Meeting saved successfully!");
+                                        loadHistory();
+                                    } catch (err) {
+                                        console.error("Failed to save meeting", err);
+                                    }
+                                }}
+                                title="Save"
+                            >
+                                <Save size={16} />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(summary);
+                                    setAlertMessage("Copied to clipboard!");
+                                }}
+                                title="Copy"
+                            >
+                                <Copy size={16} />
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 p-5 overflow-y-auto bg-background/50">
+                        {summary ? (
+                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                                <ReactMarkdown>{summary}</ReactMarkdown>
                             </div>
-                        </div>
-
-                        <div className="flex-1 p-5 overflow-y-auto">
-                            {summary ? (
-                                <div className="prose prose-sm dark:prose-invert max-w-none">
-                                    <div dangerouslySetInnerHTML={{ __html: summary.replace(/\n/g, '<br/>') }} />
-                                </div>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
-                                    <p>AI Summary will be generated automatically after the meeting.</p>
-                                </div>
-                            )}
-                        </div>
-                    </section>
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm text-center px-8 opacity-50">
+                                <p>AI Summary will be generated after the meeting.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-
-
             </main>
 
             {/* --- MODALS --- */}
-            {alertMessage && (
-                <Modal
-                    isOpen={!!alertMessage}
-                    onClose={() => setAlertMessage(null)}
-                    title="Notification"
-                    footer={
-                        <button
-                            onClick={() => setAlertMessage(null)}
-                            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-                        >
-                            OK
-                        </button>
-                    }
-                >
-                    <p>{alertMessage}</p>
-                </Modal>
-            )}
+            <Modal
+                isOpen={!!alertMessage}
+                onClose={() => setAlertMessage(null)}
+                title="Notification"
+                footer={
+                    <Button onClick={() => setAlertMessage(null)}>
+                        OK
+                    </Button>
+                }
+            >
+                <p className="py-4 text-center">{alertMessage}</p>
+            </Modal>
 
-            {pendingDeleteId !== null && (
-                <Modal
-                    isOpen={pendingDeleteId !== null}
-                    onClose={() => setPendingDeleteId(null)}
-                    title="Delete Meeting"
-                    footer={
-                        <>
-                            <button
-                                onClick={() => setPendingDeleteId(null)}
-                                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm font-medium hover:bg-destructive/90 transition-colors"
-                            >
-                                Delete
-                            </button>
-                        </>
-                    }
-                >
-                    <p>Are you sure you want to permanently delete this meeting?</p>
-                </Modal>
-            )}
+            <Modal
+                isOpen={pendingDeleteId !== null}
+                onClose={() => setPendingDeleteId(null)}
+                title="Delete Meeting"
+                footer={
+                    <div className="flex gap-3">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setPendingDeleteId(null)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDelete}
+                        >
+                            Delete
+                        </Button>
+                    </div>
+                }
+            >
+                <p className="py-4">Are you sure you want to permanently delete this meeting? This action cannot be undone.</p>
+            </Modal>
         </div>
     );
 }

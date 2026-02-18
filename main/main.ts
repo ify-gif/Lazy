@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import { logger } from './logger';
 
 // ESM-style imports are allowed in 'NodeNext' if we stick to CJS output limits or use .mts
 // But for simplicity with Electron + NodeNext (CJS default), we just use __dirname.
@@ -31,7 +32,7 @@ function createWindow() {
     // So distinct-electron/../out/index.html is correct.
     const appUrl = dev ? 'http://localhost:3000' : `file://${path.join(__dirname, '../out/index.html')}`;
 
-    console.log(`Loading URL: ${appUrl}`);
+    logger.info(`Loading URL: ${appUrl}`);
     mainWindow.loadURL(appUrl);
 
     mainWindow.once('ready-to-show', () => {
@@ -98,21 +99,25 @@ autoUpdater.allowPrerelease = true; // Optional, but good for testing
 
 // Map Update Events to Global Status
 autoUpdater.on('checking-for-update', () => {
+    logger.info('Checking for updates...');
     broadcastStatus('processing', 'Checking for updates...');
 });
 
 autoUpdater.on('update-available', (info) => {
+    logger.info(`Update v${info.version} available`);
     broadcastStatus('ready', `Update v${info.version} available`);
     // Send specifically for the Update Pill
     broadcastUpdateEvent('update-available', info);
 });
 
 autoUpdater.on('update-not-available', () => {
+    logger.info('App is up to date');
     broadcastStatus('ready', 'App is up to date');
     broadcastUpdateEvent('update-not-available');
 });
 
 autoUpdater.on('error', (err) => {
+    logger.error(`Update error: ${err.message}`);
     broadcastStatus('error', `Update error: ${err.message}`);
     broadcastUpdateEvent('error', err.message);
 });
@@ -128,15 +133,19 @@ autoUpdater.on('update-downloaded', () => {
     broadcastUpdateEvent('update-downloaded');
 });
 
-function broadcastStatus(status: string, message: string) {
+import { StatusUpdate, UpdateEvent } from './types';
+
+function broadcastStatus(status: StatusUpdate['status'], message: string) {
     BrowserWindow.getAllWindows().forEach(win => {
-        win.webContents.send('app-status-update', { status, message });
+        const update: StatusUpdate = { status, message };
+        win.webContents.send('app-status-update', update);
     });
 }
 
 function broadcastUpdateEvent(event: string, data?: any) {
     BrowserWindow.getAllWindows().forEach(win => {
-        win.webContents.send('app-update-event', { event, data });
+        const updateEvent: UpdateEvent = { event, data };
+        win.webContents.send('app-update-event', updateEvent);
     });
 }
 
@@ -213,7 +222,7 @@ app.whenReady().then(() => {
     // Check for updates on startup
     setTimeout(() => {
         autoUpdater.checkForUpdates().catch(err => {
-            console.error("Initial update check failed", err);
+            logger.error("Initial update check failed", err);
         });
     }, 3000);
 

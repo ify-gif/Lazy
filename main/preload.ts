@@ -52,5 +52,6 @@ contextBridge.exposeInMainWorld('electron', {
         getWorkStories: () => ipcRenderer.invoke('db-get-work-stories'),
         getComments: (storyId: number) => ipcRenderer.invoke('db-get-comments', storyId),
         deleteItem: (table: 'meetings' | 'work_stories', id: number) => ipcRenderer.invoke('db-delete-item', { table, id }),
-    }
+    },
+    platform: process.platform
 });

@@ -6,9 +6,10 @@ import Button from "./Button";
 
 interface WelcomeGuideProps {
     onOpenSettings: () => void;
+    refreshToken?: number;
 }
 
-export default function WelcomeGuide({ onOpenSettings }: WelcomeGuideProps) {
+export default function WelcomeGuide({ onOpenSettings, refreshToken = 0 }: WelcomeGuideProps) {
     const [isVisible, setIsVisible] = useState(false);
     const [dismissed, setDismissed] = useState(false);
 
@@ -19,11 +20,15 @@ export default function WelcomeGuide({ onOpenSettings }: WelcomeGuideProps) {
                 const key = await electron.settings.getApiKey();
                 if (!key || key.trim() === "") {
                     setIsVisible(true);
+                    setDismissed(false);
+                } else {
+                    setIsVisible(false);
+                    setDismissed(false);
                 }
             }
         };
         checkApiKey();
-    }, []);
+    }, [refreshToken]);
 
     if (!isVisible || dismissed) return null;
 

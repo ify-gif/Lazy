@@ -14,8 +14,9 @@ export default function Input({
     className = '',
     ...props
 }: InputProps) {
+    const needsVerticalGap = Boolean(label || error);
     return (
-        <div className="flex flex-col gap-1.5 w-full">
+        <div className={`flex flex-col ${needsVerticalGap ? 'gap-1.5' : ''} ${className.includes('w-') ? className : 'w-full'}`}>
             {label && (
                 <label className="text-sm font-medium text-muted-foreground">
                     {label}

@@ -2,15 +2,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse } from './types';
 
 contextBridge.exposeInMainWorld('electron', {
-    ipcRenderer: {
-        send: (channel: string, data: any) => ipcRenderer.send(channel, data),
-        on: (channel: string, func: (...args: any[]) => void) => {
-            const subscription = (_event: any, ...args: any[]) => func(...args);
-            ipcRenderer.on(channel, subscription);
-            return () => ipcRenderer.removeListener(channel, subscription);
-        },
-        invoke: (channel: string, data: any) => ipcRenderer.invoke(channel, data),
-    },
     windowControls: {
         minimize: () => ipcRenderer.send('window-minimize'),
         maximize: () => ipcRenderer.send('window-maximize'),
@@ -24,7 +15,7 @@ contextBridge.exposeInMainWorld('electron', {
         getVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
         sendStatus: (status: AppStatus, message?: string) => ipcRenderer.send('app-status-update', { status, message }),
         onStatusChange: (callback: (data: StatusUpdate) => void) => {
-            const subscription = (_event: any, data: StatusUpdate) => callback(data);
+            const subscription = (_event: unknown, data: StatusUpdate) => callback(data);
             ipcRenderer.on('app-status-update', subscription);
             return () => ipcRenderer.removeListener('app-status-update', subscription);
         },
@@ -35,7 +26,7 @@ contextBridge.exposeInMainWorld('electron', {
         download: () => ipcRenderer.invoke('app-download-update'),
         install: () => ipcRenderer.send('app-install-update'),
         onUpdateEvent: (callback: (data: UpdateEvent) => void) => {
-            const subscription = (_event: any, data: UpdateEvent) => callback(data);
+            const subscription = (_event: unknown, data: UpdateEvent) => callback(data);
             ipcRenderer.on('app-update-event', subscription);
             return () => ipcRenderer.removeListener('app-update-event', subscription);
         },
@@ -49,9 +40,11 @@ contextBridge.exposeInMainWorld('electron', {
     db: {
         saveMeeting: (title: string, transcript: string, summary: string): Promise<number> => ipcRenderer.invoke('db-save-meeting', { title, transcript, summary }),
         getMeetings: (): Promise<Meeting[]> => ipcRenderer.invoke('db-get-meetings'),
-        saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number): Promise<number> => ipcRenderer.invoke('db-save-work-story', { type, overview, output, parentId }),
+        saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string): Promise<number> =>
+            ipcRenderer.invoke('db-save-work-story', { type, title, overview, output, parentId }),
         getWorkStories: (): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-work-stories'),
         getComments: (storyId: number): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-comments', storyId),
+        updateWorkStoryTitle: (id: number, title: string): Promise<void> => ipcRenderer.invoke('db-update-work-story-title', { id, title }),
         deleteItem: (table: 'meetings' | 'work_stories', id: number): Promise<void> => ipcRenderer.invoke('db-delete-item', { table, id }),
     },
     platform: process.platform

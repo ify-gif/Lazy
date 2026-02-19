@@ -3,14 +3,17 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-    Search, Mic, Save, Plus, Trash2, Copy, Download
+    Mic, Plus, Trash2, Copy, Download, Search, Pencil, Check, X
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
-import { SearchInput } from "../components/Input";
 import type { WorkStory, AIResponse } from "../../main/types";
+
+type AudioContextCtor = typeof AudioContext;
+type ExtendedWindow = Window & { webkitAudioContext?: AudioContextCtor };
+const SILENCE_THRESHOLD = 6;
 
 export default function TrackerPage() {
     const router = useRouter();
@@ -35,6 +38,8 @@ export default function TrackerPage() {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+    const [editingStoryId, setEditingStoryId] = useState<number | null>(null);
+    const [editingStoryTitle, setEditingStoryTitle] = useState("");
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
@@ -95,8 +100,26 @@ export default function TrackerPage() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
+    const toCompactTitle = (text: string) => {
+        const normalized = text.replace(/\s+/g, " ").trim();
+        if (!normalized) return "Untitled Story";
+        const max = 42;
+        return normalized.length > max ? `${normalized.slice(0, max - 1).trim()}...` : normalized;
+    };
+
+    const buildStoryTitle = (overviewText: string, outputText: string, aiSummary?: string | null) => {
+        if (aiSummary && aiSummary.trim()) return toCompactTitle(aiSummary);
+        const firstLine = outputText.split('\n').find((line) => line.trim()) || "";
+        if (firstLine) return toCompactTitle(firstLine.replace(/^#+\s*/, ""));
+        return toCompactTitle(overviewText);
+    };
+
     const startVAD = async (stream: MediaStream) => {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const AudioContextImpl = window.AudioContext || (window as ExtendedWindow).webkitAudioContext;
+        if (!AudioContextImpl) {
+            throw new Error("AudioContext is not available");
+        }
+        const audioContext = new AudioContextImpl();
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
@@ -106,7 +129,7 @@ export default function TrackerPage() {
         analyserRef.current = analyser;
         maxVolumeRef.current = 0;
 
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const dataArray = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
         const updateVolume = () => {
             if (!analyserRef.current) return;
             analyserRef.current.getByteFrequencyData(dataArray);
@@ -149,9 +172,9 @@ export default function TrackerPage() {
                 recorder.onstop = async () => {
                     stopVAD();
                     // Silence Check: If max volume was < 10 (out of 255), drop it.
-                    if (maxVolumeRef.current < 10) {
+                    if (maxVolumeRef.current < SILENCE_THRESHOLD) {
                         console.warn("Audio too quiet, dropping.");
-                        window.electron?.settings?.sendStatus('ready', 'Ignored (Silence)');
+                        window.electron?.settings?.sendStatus('warning', 'IGNORED (SILENCE)');
                         setStream(null);
                         mediaStream.getTracks().forEach(t => t.stop());
                         return;
@@ -201,10 +224,10 @@ export default function TrackerPage() {
             setOverview(transcript);
 
             window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("AI Processing failed", err);
 
-            const msg = (err.message as string) || 'AI Failed';
+            const msg = err instanceof Error ? err.message : 'AI Failed';
             if (msg.includes('API Key not found')) {
                 window.electron?.settings?.sendStatus('error', 'NO API KEY');
             } else {
@@ -242,6 +265,7 @@ export default function TrackerPage() {
         if (!summary || !window.electron?.db) return;
         try {
             const output = jiraStory ? `SUMMARY: ${jiraStory.summary}\n\n${jiraStory.description}` : summary;
+            const storyTitle = buildStoryTitle(overview, output, jiraStory?.summary);
 
             // If saving a comment, we need a parent story
             if (activeTab === 'comment' && !selectedStoryId) {
@@ -253,7 +277,8 @@ export default function TrackerPage() {
                 activeTab,
                 overview,
                 output,
-                activeTab === 'comment' && selectedStoryId ? selectedStoryId : undefined
+                activeTab === 'comment' && selectedStoryId ? selectedStoryId : undefined,
+                activeTab === 'story' ? storyTitle : undefined
             );
 
             setAlertMessage(activeTab === 'story' ? "Story saved!" : "Comment saved!");
@@ -334,21 +359,14 @@ export default function TrackerPage() {
         URL.revokeObjectURL(url);
     };
 
-    const handleCopyComment = (text: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(text);
-        setAlertMessage("Comment copied to clipboard!");
-        setTimeout(() => setAlertMessage(null), 2000);
-    };
-
     const handleSelectItem = (item: WorkStory) => {
         // Since sidebar only shows stories now, we always switch to Story tab when clicking a sidebar item
         setActiveTab('story');
-        setOverview(item.overview);
+        setOverview(item.overview || "");
         setSelectedStoryId(item.id ?? null);
         setSelectedCommentId(null);
 
-        let content = item.output;
+        const content = item.output || "";
 
         // Legacy 1: "SUMMARY: ... \n\n ..." format
         if (item.type === 'story' && content.startsWith('SUMMARY:')) {
@@ -369,7 +387,7 @@ export default function TrackerPage() {
                     setSummary(parsed.description);
                     return;
                 }
-            } catch (e) {
+            } catch {
                 // Not valid JSON, fall through
             }
         }
@@ -399,6 +417,35 @@ export default function TrackerPage() {
     const handleDeleteClick = (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
         setPendingDeleteId(id);
+    };
+
+    const startEditingStoryTitle = (item: WorkStory, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!item.id) return;
+        setEditingStoryId(item.id);
+        setEditingStoryTitle(item.title?.trim() || buildStoryTitle(item.overview || "", item.output || ""));
+    };
+
+    const cancelEditingStoryTitle = () => {
+        setEditingStoryId(null);
+        setEditingStoryTitle("");
+    };
+
+    const saveEditedStoryTitle = async (item: WorkStory, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (!item.id || !window.electron?.db) return;
+        const sanitized = toCompactTitle(editingStoryTitle);
+        try {
+            await window.electron.db.updateWorkStoryTitle(item.id, sanitized);
+            setHistoryItems((prev) =>
+                prev.map((story) => (story.id === item.id ? { ...story, title: sanitized } : story))
+            );
+        } catch (err) {
+            console.error("Failed to update story title", err);
+            setAlertMessage("Could not rename story.");
+        } finally {
+            cancelEditingStoryTitle();
+        }
     };
 
     const confirmDelete = async () => {
@@ -436,12 +483,12 @@ export default function TrackerPage() {
     };
 
     return (
-        <div className="flex h-screen flex-col bg-background text-foreground font-sans overflow-hidden">
+        <div className="flex h-full flex-col bg-background text-foreground font-sans overflow-hidden">
             {/* --- TOP BRAND BAR --- */}
-            <div className="flex items-center justify-center py-0 border-b border-border bg-card/50">
+            <div className="relative h-24 border-b border-border bg-card/50">
                 <button
                     onClick={() => router.push('/')}
-                    className="transition-opacity focus:outline-none cursor-pointer p-0 m-0 border-none bg-transparent"
+                    className="absolute inset-0 flex items-center justify-center transition-opacity focus:outline-none cursor-pointer p-0 m-0 border-none bg-transparent"
                     title="Go Home"
                 >
                     <img
@@ -454,57 +501,115 @@ export default function TrackerPage() {
 
             <div className="flex-1 flex overflow-hidden p-1 gap-1">
                 {/* --- LEFT: HISTORY --- */}
-                <aside className="w-64 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                    <div className="bg-muted/50 border-b border-border p-1">
-                        <SearchInput
-                            placeholder="Search..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="bg-background/80 h-7 text-[10px]"
-                        />
+                <aside className="w-72 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <div className="flex h-8 items-center border-b border-border bg-muted/50 px-2 overflow-hidden">
+                        <div className="relative w-full">
+                            <Search
+                                size={14}
+                                className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                            />
+                            <input
+                                placeholder="Search..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="h-6 w-full rounded-md border border-border bg-background/80 pl-8 pr-2 text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                        </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
+                    <div className="flex-1 overflow-y-auto p-1.5 space-y-2">
                         {historyItems.length === 0 ? (
-                            <div className="text-center py-6 opacity-30 italic text-[10px] text-muted-foreground">No history</div>
+                            <div className="text-center py-6 opacity-30 italic text-sm text-muted-foreground">No history</div>
                         ) : historyItems
-                            .filter(item => item.overview.toLowerCase().includes(searchQuery.toLowerCase()))
+                            .filter(item => (item.overview || "").toLowerCase().includes(searchQuery.toLowerCase()))
                             .map(item => (
                                 <div
                                     key={item.id}
                                     onClick={() => handleSelectItem(item)}
-                                    className={`group flex items-center justify-between p-1.5 rounded cursor-pointer transition-all ${selectedStoryId === item.id
-                                        ? "bg-primary/10 border border-primary/20 shadow-sm"
-                                        : "hover:bg-secondary border border-transparent"
+                                    className={`group flex items-center justify-between p-1.5 rounded-md cursor-pointer transition-all border ${selectedStoryId === item.id
+                                        ? "bg-primary/10 border-primary/25 shadow-sm"
+                                        : "bg-background/80 border-border hover:bg-secondary/60"
                                         }`}
                                 >
                                     <div className="flex flex-col min-w-0 mr-1.5">
-                                        <div className="font-semibold text-[10px] text-foreground truncate" title={item.overview}>
-                                            {item.overview || "Untitled"}
-                                        </div>
-                                        <span className="text-[8px] text-muted-foreground font-medium uppercase tracking-tighter">
+                                        {editingStoryId === item.id ? (
+                                            <div className="flex items-center gap-0.5">
+                                                <input
+                                                    autoFocus
+                                                    value={editingStoryTitle}
+                                                    onChange={(e) => setEditingStoryTitle(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") {
+                                                            void saveEditedStoryTitle(item);
+                                                        } else if (e.key === "Escape") {
+                                                            cancelEditingStoryTitle();
+                                                        }
+                                                    }}
+                                                    className="h-5 w-full rounded border border-border bg-background px-1.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                                />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-5 w-5 p-0 shrink-0"
+                                                    onClick={(e) => void saveEditedStoryTitle(item, e)}
+                                                    title="Save title"
+                                                >
+                                                    <Check size={10} />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-5 w-5 p-0 shrink-0"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        cancelEditingStoryTitle();
+                                                    }}
+                                                    title="Cancel"
+                                                >
+                                                    <X size={10} />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-0.5 min-w-0">
+                                                <div className="font-medium text-[11px] leading-snug text-foreground truncate" title={item.title || item.overview || "Untitled Story"}>
+                                                    {item.title || buildStoryTitle(item.overview || "", item.output || "")}
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-4 w-4 p-0 shrink-0 opacity-70 hover:opacity-100"
+                                                    onClick={(e) => startEditingStoryTitle(item, e)}
+                                                    title="Rename"
+                                                >
+                                                    <Pencil size={9} />
+                                                </Button>
+                                            </div>
+                                        )}
+                                        <span className="text-[9px] leading-none text-muted-foreground">
                                             {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
                                         </span>
                                     </div>
 
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="shrink-0 flex items-center overflow-hidden rounded-md border border-border bg-background/70">
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-5 w-5"
+                                            className="h-7 w-7 p-0 rounded-none border-0 bg-transparent hover:bg-secondary/70"
                                             onClick={(e) => handleExportItem(item, e)}
                                             title="Export"
                                         >
-                                            <Download size={10} />
+                                            <Download size={12} />
                                         </Button>
+                                        <div className="h-7 w-px bg-border" />
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-5 w-5 text-destructive hover:bg-destructive/10"
+                                            className="h-7 w-7 p-0 rounded-none border-0 bg-transparent text-destructive hover:bg-destructive/10"
                                             onClick={(e) => handleDeleteClick(item.id!, e)}
                                             title="Delete"
                                         >
-                                            <Trash2 size={10} />
+                                            <Trash2 size={12} className="text-destructive" />
                                         </Button>
                                     </div>
                                 </div>
@@ -515,21 +620,13 @@ export default function TrackerPage() {
                 {/* --- CENTER: WORKBENCH --- */}
                 <main className="flex-1 flex flex-col gap-1 overflow-hidden">
                     <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                        <div className="flex items-center justify-between px-3 py-1 bg-muted/50 border-b border-border">
-                            <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                Transcript
-                                <span className="ml-2 text-[9px] font-mono text-zinc-400">
-                                    {(overview || "").split(/\s+/).filter(w => w).length} words
-                                </span>
+                        <div className="relative flex h-8 items-center justify-center px-3 py-1 bg-muted/50 border-b border-border">
+                            <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
+                                TRANSCRIPT
                             </h2>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleNewSession}
-                                className="text-[9px] h-5 px-2 uppercase tracking-wider font-bold"
-                            >
-                                New
-                            </Button>
+                            <span className="absolute right-3 text-[9px] font-mono text-zinc-400 italic">
+                                {(overview || "").split(/\s+/).filter(w => w).length} words
+                            </span>
                         </div>
 
                         <textarea
@@ -540,8 +637,9 @@ export default function TrackerPage() {
                         />
 
                         {/* Controls */}
-                        <div className="px-3 py-2 flex items-center justify-between bg-muted/20 border-t border-border mt-auto">
-                            <div className="flex items-center gap-1.5">
+                        <div className="relative px-3 py-2 flex items-center justify-between bg-muted/20 border-t border-border mt-auto">
+                            <div className="flex items-center">
+                                <div className="flex items-center gap-1.5">
                                 <Button
                                     variant={isRecording ? 'destructive' : 'primary'}
                                     size="sm"
@@ -565,6 +663,15 @@ export default function TrackerPage() {
                                         <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">AI Processing...</span>
                                     </div>
                                 )}
+                                </div>
+
+                                <button
+                                    onClick={handleNewSession}
+                                    className="absolute left-1/2 -translate-x-1/2 h-7 px-2 text-[10px] font-bold italic uppercase tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 hover:opacity-80 transition-opacity"
+                                    title="Start New Session"
+                                >
+                                    New Session
+                                </button>
                             </div>
 
                             <Button
@@ -581,21 +688,23 @@ export default function TrackerPage() {
 
                     {/* Bottom: OUTPUT */}
                     <div className="flex-1 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                        <div className="flex items-center justify-between px-3 py-1 bg-muted/50 border-b border-border">
-                            <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Output</h2>
-                            <div className="flex items-center gap-2">
+                        <div className="relative flex h-8 items-center justify-center px-3 py-1 bg-muted/50 border-b border-border">
+                            <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">OUTPUT</h2>
+                            <div className="absolute right-3 flex items-center gap-2">
                                 {summary && (
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-5 w-5"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(summary);
-                                            setAlertMessage("Copied!");
-                                        }}
-                                    >
-                                        <Copy size={11} />
-                                    </Button>
+                                    <div className="flex h-6 items-center overflow-hidden rounded-md bg-background/80 ring-1 ring-border">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 p-0 rounded-none border-0 bg-transparent hover:bg-secondary/70"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(summary);
+                                                setAlertMessage("Copied!");
+                                            }}
+                                        >
+                                            <Copy size={11} />
+                                        </Button>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -629,21 +738,20 @@ export default function TrackerPage() {
                                 onClick={handleExport}
                                 disabled={!summary}
                             >
-                                <Download size={11} className="mr-1" />
-                                Export (.md)
+                                Export
                             </Button>
                         </div>
                     </div>
                 </main>
 
                 {/* --- RIGHT: COMMENTS --- */}
-                <aside className="w-64 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
-                    <div className="flex items-center justify-between px-3 py-1 bg-muted/50 border-b border-border">
+                <aside className="w-72 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <div className="relative flex h-8 items-center justify-center px-3 py-1 bg-muted/50 border-b border-border">
                         <h2 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Comments</h2>
                         <Button
                             variant={activeTab === 'comment' && !selectedCommentId ? 'primary' : 'ghost'}
                             size="icon"
-                            className="h-5 w-5"
+                            className="absolute right-3 h-5 w-5"
                             onClick={handleAddCommentClick}
                             disabled={!selectedStoryId}
                             title={selectedStoryId ? "Add Comment" : "Select a story first"}
@@ -652,48 +760,49 @@ export default function TrackerPage() {
                         </Button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
+                    <div className="flex-1 overflow-y-auto p-1.5 space-y-2">
                         {comments.length === 0 ? (
-                            <div className="text-center py-6 opacity-30 italic text-[10px] text-muted-foreground">
+                            <div className="text-center py-6 opacity-30 italic text-sm text-muted-foreground">
                                 {!selectedStoryId ? "Select a story" : "No comments yet"}
                             </div>
                         ) : comments.map(comment => (
                             <div
                                 key={comment.id}
                                 onClick={() => handleSelectComment(comment)}
-                                className={`group flex items-center justify-between p-1.5 rounded cursor-pointer transition-all ${selectedCommentId === comment.id
-                                    ? "bg-primary/10 border border-primary/20 shadow-sm"
-                                    : "hover:bg-secondary border border-transparent"
+                                className={`group flex items-center justify-between p-1.5 rounded-md cursor-pointer transition-all border ${selectedCommentId === comment.id
+                                    ? "bg-primary/10 border-primary/25 shadow-sm"
+                                    : "bg-background/80 border-border hover:bg-secondary/60"
                                     }`}
                             >
-                                <div className="flex flex-col min-w-0 mr-1.5">
-                                    <div className="font-semibold text-[10px] text-foreground truncate" title={comment.output}>
-                                        {comment.output.slice(0, 35)}...
+                                    <div className="flex flex-col min-w-0 mr-1.5">
+                                    <div className="font-medium text-[11px] leading-snug text-foreground truncate" title={comment.output || "Untitled"}>
+                                        {(comment.output || "").slice(0, 35)}...
                                     </div>
-                                    <span className="text-[8px] text-muted-foreground font-medium uppercase tracking-tighter">
+                                    <span className="text-[9px] leading-none text-muted-foreground">
                                         {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : 'Unknown'}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="shrink-0 flex items-center overflow-hidden rounded-md border border-border bg-background/70">
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-5 w-5"
+                                        className="h-7 w-7 p-0 rounded-none border-0 bg-transparent hover:bg-secondary/70"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            navigator.clipboard.writeText(comment.output);
+                                            navigator.clipboard.writeText(comment.output || "");
                                             setAlertMessage("Copied!");
                                         }}
                                     >
-                                        <Copy size={10} />
+                                        <Copy size={12} />
                                     </Button>
+                                    <div className="h-7 w-px bg-border" />
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-5 w-5 text-destructive hover:bg-destructive/10"
+                                        className="h-7 w-7 p-0 rounded-none border-0 bg-transparent text-destructive hover:bg-destructive/10"
                                         onClick={(e) => handleDeleteClick(comment.id!, e)}
                                     >
-                                        <Trash2 size={10} />
+                                        <Trash2 size={12} className="text-destructive" />
                                     </Button>
                                 </div>
                             </div>

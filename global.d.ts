@@ -3,11 +3,6 @@ import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse } 
 declare global {
     interface Window {
         electron: {
-            ipcRenderer: {
-                send: (channel: string, data: any) => void;
-                on: (channel: string, func: (...args: any[]) => void) => () => void;
-                invoke: (channel: string, data: any) => Promise<any>;
-            };
             windowControls: {
                 minimize: () => void;
                 maximize: () => void;
@@ -24,8 +19,8 @@ declare global {
                 validateApiKey: (key: string) => Promise<boolean>;
             };
             updates: {
-                check: () => Promise<any>;
-                download: () => Promise<any>;
+                check: () => Promise<unknown>;
+                download: () => Promise<unknown>;
                 install: () => void;
                 onUpdateEvent: (callback: (data: UpdateEvent) => void) => () => void;
             };
@@ -38,9 +33,10 @@ declare global {
             db: {
                 saveMeeting: (title: string, transcript: string, summary: string) => Promise<number>;
                 getMeetings: () => Promise<Meeting[]>;
-                saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number) => Promise<number>;
+                saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string) => Promise<number>;
                 getWorkStories: () => Promise<WorkStory[]>;
                 getComments: (storyId: number) => Promise<WorkStory[]>;
+                updateWorkStoryTitle: (id: number, title: string) => Promise<void>;
                 deleteItem: (table: 'meetings' | 'work_stories', id: number) => Promise<void>;
             };
             platform: string;

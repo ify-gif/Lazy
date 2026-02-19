@@ -9,28 +9,22 @@ interface WaveformProps {
     lineColor?: string;
 }
 
+type AudioContextCtor = typeof AudioContext;
+type ExtendedWindow = Window & { webkitAudioContext?: AudioContextCtor };
+
 export default function Waveform({ stream, isPaused = false, className = "", lineColor = "#606060" }: WaveformProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationRef = useRef<number | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
-    const dataRef = useRef<Uint8Array | null>(null);
+    const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
     const audioCtxRef = useRef<AudioContext | null>(null);
 
-    useEffect(() => {
-        if (!stream || isPaused) {
-            stopVisualizer();
-            return;
-        }
-
-        startVisualizer();
-
-        return () => stopVisualizer();
-    }, [stream, isPaused]);
-
-    const startVisualizer = () => {
+    function startVisualizer() {
         if (!stream) return;
 
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const AudioContextImpl = window.AudioContext || (window as ExtendedWindow).webkitAudioContext;
+        if (!AudioContextImpl) return;
+        const audioCtx = new AudioContextImpl();
         const analyser = audioCtx.createAnalyser();
         const source = audioCtx.createMediaStreamSource(stream);
 
@@ -39,12 +33,12 @@ export default function Waveform({ stream, isPaused = false, className = "", lin
 
         analyserRef.current = analyser;
         audioCtxRef.current = audioCtx;
-        dataRef.current = new Uint8Array(analyser.frequencyBinCount);
+        dataRef.current = new Uint8Array<ArrayBuffer>(new ArrayBuffer(analyser.frequencyBinCount));
 
         draw();
-    };
+    }
 
-    const stopVisualizer = () => {
+    function stopVisualizer() {
         if (animationRef.current) cancelAnimationFrame(animationRef.current);
         if (audioCtxRef.current) audioCtxRef.current.close();
 
@@ -58,9 +52,9 @@ export default function Waveform({ stream, isPaused = false, className = "", lin
             const ctx = canvas.getContext("2d");
             ctx?.clearRect(0, 0, canvas.width, canvas.height);
         }
-    };
+    }
 
-    const draw = () => {
+    function draw() {
         const canvas = canvasRef.current;
         if (!canvas || !analyserRef.current || !dataRef.current) return;
 
@@ -74,7 +68,7 @@ export default function Waveform({ stream, isPaused = false, className = "", lin
 
         const renderFrame = () => {
             animationRef.current = requestAnimationFrame(renderFrame);
-            analyser.getByteFrequencyData(dataArray as any);
+            analyser.getByteFrequencyData(dataArray);
 
             ctx.clearRect(0, 0, width, height);
 
@@ -100,7 +94,18 @@ export default function Waveform({ stream, isPaused = false, className = "", lin
         };
 
         renderFrame();
-    };
+    }
+
+    useEffect(() => {
+        if (!stream || isPaused) {
+            stopVisualizer();
+            return;
+        }
+
+        startVisualizer();
+
+        return () => stopVisualizer();
+    }, [stream, isPaused]);
 
     return (
         <canvas

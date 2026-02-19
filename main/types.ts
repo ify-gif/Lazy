@@ -9,6 +9,7 @@ export interface Meeting {
 export interface WorkStory {
     id?: number;
     type: 'story' | 'comment';
+    title?: string | null;
     overview: string;
     output: string;
     created_at?: string;
@@ -20,7 +21,7 @@ export interface AIResponse {
     description: string;
 }
 
-export type AppStatus = 'ready' | 'recording' | 'processing' | 'error';
+export type AppStatus = 'ready' | 'recording' | 'processing' | 'warning' | 'error';
 
 export interface StatusUpdate {
     status: AppStatus;
@@ -29,5 +30,5 @@ export interface StatusUpdate {
 
 export interface UpdateEvent {
     event: string;
-    data?: any;
+    data?: unknown;
 }

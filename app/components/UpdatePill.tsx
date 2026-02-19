@@ -4,11 +4,15 @@ import { useState, useEffect } from 'react';
 import { UpdateEvent } from '../../main/types';
 import Button from './Button';
 
+interface UpdateInfoLike {
+    version?: string;
+}
+
 export default function UpdatePill() {
     const [version, setVersion] = useState<string>('v0.0.0');
     const [status, setStatus] = useState<'checking' | 'ready' | 'update-available' | 'downloading' | 'error'>('checking');
     const [progress, setProgress] = useState<number>(0);
-    const [updateInfo, setUpdateInfo] = useState<any>(null);
+    const [updateInfo, setUpdateInfo] = useState<UpdateInfoLike | null>(null);
     const [showVersion, setShowVersion] = useState(true);
 
     useEffect(() => {
@@ -39,7 +43,7 @@ export default function UpdatePill() {
                 switch (data.event) {
                     case 'update-available':
                         setStatus('update-available');
-                        setUpdateInfo(data.data);
+                        setUpdateInfo((data.data as UpdateInfoLike | undefined) ?? null);
                         break;
                     case 'update-not-available':
                         setStatus('ready');
@@ -66,6 +70,10 @@ export default function UpdatePill() {
                 clearTimeout(checkTimeout);
             };
         }
+
+        return () => {
+            clearTimeout(checkTimeout);
+        };
     }, []);
 
     const handleClick = async () => {

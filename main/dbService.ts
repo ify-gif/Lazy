@@ -46,6 +46,7 @@ export const DBService = {
                 CREATE TABLE IF NOT EXISTS work_stories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     type TEXT NOT NULL, -- 'story' or 'comment'
+                    title TEXT,
                     overview TEXT,
                     output TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -54,7 +55,10 @@ export const DBService = {
             `);
 
             // Attempt to add parent_id if it doesn't exist (for existing DBs)
-            db.run(`ALTER TABLE work_stories ADD COLUMN parent_id INTEGER`, (err) => {
+            db.run(`ALTER TABLE work_stories ADD COLUMN parent_id INTEGER`, () => {
+                // Ignore error if column already exists
+            });
+            db.run(`ALTER TABLE work_stories ADD COLUMN title TEXT`, () => {
                 // Ignore error if column already exists
             });
         });
@@ -92,13 +96,13 @@ export const DBService = {
     },
 
     // Work Stories
-    async saveWorkStory(type: 'story' | 'comment', overview: string, output: string, parentId?: number): Promise<number> {
+    async saveWorkStory(type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string): Promise<number> {
         const db = this.db;
         if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
             db.run(
-                'INSERT INTO work_stories (type, overview, output, parent_id) VALUES (?, ?, ?, ?)',
-                [type, overview, output, parentId || null],
+                'INSERT INTO work_stories (type, title, overview, output, parent_id) VALUES (?, ?, ?, ?, ?)',
+                [type, type === 'story' ? (title ?? null) : null, overview, output, parentId || null],
                 function (err) {
                     if (err) reject(err);
                     else resolve(this.lastID);
@@ -139,13 +143,58 @@ export const DBService = {
         });
     },
 
-    async deleteItem(table: 'meetings' | 'work_stories', id: number): Promise<void> {
+    async updateWorkStoryTitle(id: number, title: string): Promise<void> {
         const db = this.db;
         if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
-            db.run(`DELETE FROM ${table} WHERE id = ?`, [id], (err) => {
-                if (err) reject(err);
-                else resolve();
+            db.run(
+                "UPDATE work_stories SET title = ? WHERE id = ? AND type = 'story'",
+                [title, id],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    },
+
+    async deleteItem(table: 'meetings' | 'work_stories', id: number): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        if (table !== 'meetings' && table !== 'work_stories') {
+            throw new Error('Invalid table name');
+        }
+        return new Promise((resolve, reject) => {
+            if (table === 'meetings') {
+                db.run('DELETE FROM meetings WHERE id = ?', [id], (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+                return;
+            }
+
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION');
+                db.run('DELETE FROM work_stories WHERE parent_id = ?', [id], (childErr) => {
+                    if (childErr) {
+                        db.run('ROLLBACK');
+                        reject(childErr);
+                        return;
+                    }
+
+                    db.run('DELETE FROM work_stories WHERE id = ?', [id], (itemErr) => {
+                        if (itemErr) {
+                            db.run('ROLLBACK');
+                            reject(itemErr);
+                            return;
+                        }
+
+                        db.run('COMMIT', (commitErr) => {
+                            if (commitErr) reject(commitErr);
+                            else resolve();
+                        });
+                    });
+                });
             });
         });
     }

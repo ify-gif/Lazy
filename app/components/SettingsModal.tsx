@@ -8,9 +8,14 @@ import Input from "./Input";
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onApiKeyValidated?: () => void;
 }
 
-export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+type AudioContextCtor = typeof AudioContext;
+type ExtendedWindow = Window & { webkitAudioContext?: AudioContextCtor };
+type UpdateCheckResult = { updateInfo?: unknown } | null;
+
+export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: SettingsModalProps) {
     const { theme, setTheme } = useTheme();
     const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
     const [selectedMic, setSelectedMic] = useState("");
@@ -22,16 +27,34 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [isDownloading, setIsDownloading] = useState(false);
     const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'uptodate' | 'error' | 'available'>('idle');
 
-    const [mounted, setMounted] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const animationFrameRef = useRef<number | null>(null);
     const maxVolumeRef = useRef(0);
 
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    function stopAudioOnly() {
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        if (streamRef.current) streamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+        if (audioContextRef.current) audioContextRef.current.close();
+        audioContextRef.current = null;
+        analyserRef.current = null;
+        streamRef.current = null;
+    }
+
+    async function getMicrophones() {
+        try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter(d => d.kind === 'audioinput');
+            setMics(audioInputs);
+            if (audioInputs.length > 0 && !localStorage.getItem("selectedMic")) {
+                setSelectedMic(audioInputs[0].deviceId);
+            }
+        } catch (err) {
+            console.error("Error accessing microphones", err);
+        }
+    }
 
     useEffect(() => {
         if (isOpen) {
@@ -51,22 +74,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }, [isOpen]);
 
     useEffect(() => {
-        if (!isOpen) stopTest();
-    }, [isOpen]);
-
-    const getMicrophones = async () => {
-        try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const audioInputs = devices.filter(d => d.kind === 'audioinput');
-            setMics(audioInputs);
-            if (audioInputs.length > 0 && !localStorage.getItem("selectedMic")) {
-                setSelectedMic(audioInputs[0].deviceId);
-            }
-        } catch (err) {
-            console.error("Error accessing microphones", err);
+        if (!isOpen) {
+            setTestStatus('idle');
+            setVolume(0);
+            stopAudioOnly();
         }
-    };
+    }, [isOpen]);
 
     const runQuickTest = async () => {
         try {
@@ -83,7 +96,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             });
             streamRef.current = stream;
 
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const AudioContextImpl = window.AudioContext || (window as ExtendedWindow).webkitAudioContext;
+            if (!AudioContextImpl) {
+                throw new Error("AudioContext is not available");
+            }
+            const audioContext = new AudioContextImpl();
             const source = audioContext.createMediaStreamSource(stream);
             const analyser = audioContext.createAnalyser();
             analyser.fftSize = 256;
@@ -92,7 +109,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             audioContextRef.current = audioContext;
             analyserRef.current = analyser;
 
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            const dataArray = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
             const updateVolume = () => {
                 if (!analyserRef.current) return;
                 analyserRef.current.getByteFrequencyData(dataArray);
@@ -128,21 +145,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }
     };
 
-    const stopAudioOnly = () => {
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        if (streamRef.current) streamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-        if (audioContextRef.current) audioContextRef.current.close();
-        audioContextRef.current = null;
-        analyserRef.current = null;
-        streamRef.current = null;
-    };
-
-    const stopTest = () => {
-        setTestStatus('idle');
-        setVolume(0);
-        stopAudioOnly();
-    };
-
     const handleSave = () => {
         if (window.electron?.settings) {
             window.electron.settings.setApiKey(apiKey);
@@ -165,6 +167,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 // Auto-save on valid
                 window.electron?.settings?.setApiKey(apiKey);
                 window.electron?.settings?.sendStatus('ready', 'Ready');
+                onApiKeyValidated?.();
             } else {
                 window.electron?.settings?.sendStatus('error', 'Invalid Key');
             }
@@ -181,7 +184,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setUpdateStatus("Checking...");
         setCheckStatus('checking');
         try {
-            const result = await window.electron.updates.check();
+            const result = await window.electron.updates.check() as UpdateCheckResult;
             if (!result || !result.updateInfo) {
                 setUpdateStatus("You are on the latest version.");
                 setIsUpdateAvailable(false);
@@ -216,8 +219,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         const unsubscribe = window.electron.updates.onUpdateEvent((data: UpdateEvent) => {
             switch (data.event) {
                 case 'update-available':
-                    if (data.data?.version) {
-                        setUpdateStatus(`Version ${data.data.version} available.`);
+                    const updateInfo = data.data as { version?: string } | undefined;
+                    if (updateInfo?.version) {
+                        setUpdateStatus(`Version ${updateInfo.version} available.`);
                     } else {
                         setUpdateStatus("New version available.");
                     }
@@ -250,7 +254,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }, [isOpen]);
 
 
-    if (!isOpen || !mounted) return null;
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -270,7 +274,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
 
                 {/* Content */}
-                <div className="p-6 space-y-6 overflow-y-auto max-h-[80vh]">
+                <div className="p-6 space-y-6 overflow-y-auto overflow-x-hidden max-h-[80vh]">
 
                     {/* API Keys */}
                     <div className="space-y-4">
@@ -288,9 +292,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <Button
                                 onClick={validateKey}
                                 disabled={keyStatus === 'validating' || !apiKey}
-                                className={`min-w-[100px] h-10 ${keyStatus === 'valid' ? "bg-green-600 hover:bg-green-700 text-white" :
-                                    keyStatus === 'invalid' ? "bg-destructive text-destructive-foreground" : ""
-                                    }`}
+                                variant={keyStatus === 'valid' ? 'success' : keyStatus === 'invalid' ? 'destructive' : 'primary'}
+                                className="min-w-[100px] h-10"
                                 isLoading={keyStatus === 'validating'}
                             >
                                 {keyStatus === 'valid' ? "Valid" :
@@ -308,10 +311,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <select
                                 value={selectedMic}
                                 onChange={(e) => setSelectedMic(e.target.value)}
-                                className="flex-1 h-10 px-3 bg-secondary border border-border rounded-md focus:ring-2 focus:ring-primary outline-none text-sm text-foreground appearance-none cursor-pointer"
+                                className="flex-1 h-10 px-3 bg-secondary border border-border rounded-md focus:ring-2 focus:ring-primary outline-none text-sm text-foreground appearance-none cursor-pointer max-w-[calc(100%-110px)]"
                             >
                                 {mics.map(mic => (
-                                    <option key={mic.deviceId} value={mic.deviceId}>
+                                    <option key={mic.deviceId} value={mic.deviceId} className="truncate">
                                         {mic.label || `Microphone ${mic.deviceId.slice(0, 5)}...`}
                                     </option>
                                 ))}
@@ -320,9 +323,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <Button
                                 onClick={runQuickTest}
                                 disabled={testStatus !== 'idle' || mics.length === 0 || !selectedMic}
-                                className={`min-w-[100px] h-10 ${testStatus === 'pass' ? "bg-green-600 hover:bg-green-700 text-white" :
-                                    testStatus === 'fail' ? "bg-destructive text-destructive-foreground" : ""
-                                    }`}
+                                variant={testStatus === 'pass' ? 'success' : testStatus === 'fail' ? 'destructive' : 'primary'}
+                                className="min-w-[100px] h-10"
                                 isLoading={testStatus === 'running'}
                             >
                                 {testStatus === 'pass' ? "Pass!" :
@@ -395,7 +397,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 <Button
                                     variant="destructive"
                                     size="sm"
-                                    onClick={updateStatus.includes("ready") ? () => (window as any).electron.updates.install() : handleDownloadUpdate}
+                                    onClick={updateStatus.includes("ready") ? () => window.electron.updates.install() : handleDownloadUpdate}
                                     disabled={isDownloading}
                                     className="px-4 py-1 animate-pulse"
                                 >
@@ -404,12 +406,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 </Button>
                             ) : (
                                 <Button
-                                    variant={checkStatus === 'uptodate' ? 'primary' : 'outline'}
+                                    variant={checkStatus === 'uptodate' ? 'success' : checkStatus === 'error' ? 'destructive' : 'outline'}
                                     size="sm"
                                     onClick={checkUpdates}
-                                    className={`min-w-[120px] ${checkStatus === 'uptodate' ? "bg-green-600 hover:bg-green-700 text-white" :
-                                        checkStatus === 'error' ? "bg-destructive text-destructive-foreground" : ""
-                                        }`}
+                                    className="min-w-[120px]"
                                     isLoading={checkStatus === 'checking'}
                                 >
                                     {checkStatus === 'uptodate' ? "Up to date" :

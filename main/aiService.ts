@@ -3,6 +3,13 @@ import { AIResponse } from './types';
 import { aiLogger } from './logger';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1';
+interface ChatCompletionResponse {
+    choices?: Array<{
+        message?: {
+            content?: string;
+        };
+    }>;
+}
 
 // Internal prompting system
 const PROMPTS = {
@@ -72,7 +79,7 @@ export const AIService = {
         if (!apiKey) throw new Error("OpenAI API Key not found");
 
         const formData = new FormData();
-        const blob = new Blob([audioBuffer as any], { type: 'audio/webm' });
+        const blob = new Blob([audioBuffer], { type: 'audio/webm' });
         formData.append('file', blob, 'audio.webm');
         formData.append('model', 'whisper-1');
         formData.append('language', 'en');
@@ -167,9 +174,13 @@ export const AIService = {
             body: JSON.stringify(body)
         });
 
-        const data = await response.json() as any;
+        const data = await response.json() as ChatCompletionResponse;
         aiLogger.info('GPT-4o response received');
-        return data.choices[0].message.content;
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) {
+            throw new Error('Invalid completion response shape');
+        }
+        return content;
     },
 
     async _fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {

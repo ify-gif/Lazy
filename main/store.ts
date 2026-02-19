@@ -60,12 +60,12 @@ export const Store = {
 
     set(key: keyof Config, value: string) {
         const config = readConfig();
-        (config as any)[key] = value;
+        config[key] = value;
         writeConfig(config);
     },
 
     get(key: keyof Config): string {
         const config = readConfig();
-        return (config as any)[key] || '';
+        return config[key] || '';
     }
 };

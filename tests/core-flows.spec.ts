@@ -7,9 +7,7 @@ test.describe('LAZY Work Tracker Core Flows', () => {
     });
 
     test('should navigate to tracker and see session recording buttons', async ({ page }) => {
-        // Click on the Tracker link/card (adjusting selector based on standard UI)
-        // Assuming there's a button or link to /tracker
-        await page.click('text=Tracker');
+        await page.click('text=Work Tracker');
         await expect(page).toHaveURL(/.*tracker/);
 
         // Verify visibility of core elements
@@ -21,10 +19,10 @@ test.describe('LAZY Work Tracker Core Flows', () => {
     });
 
     test('should navigate to meeting recorder', async ({ page }) => {
-        await page.click('text=Meeting');
+        await page.click('text=Meeting Transcription');
         await expect(page).toHaveURL(/.*meeting/);
 
-        const startRecordingBtn = page.locator('button:has-text("Start Recording")');
+        const startRecordingBtn = page.locator('button:has-text("Record")');
         await expect(startRecordingBtn).toBeVisible();
     });
 });

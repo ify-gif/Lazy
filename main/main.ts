@@ -187,7 +187,9 @@ import { AIService } from './aiService';
 
 // Database Service
 import { DBService } from './dbService';
-DBService.init();
+void DBService.init().catch((err) => {
+    logger.error('DB initialization failed', err);
+});
 
 // Auto Updater
 import { autoUpdater } from 'electron-updater';

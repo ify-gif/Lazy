@@ -62,8 +62,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "electron-dev": "concurrently -k \"cross-env BROWSER=none next dev -p 3000\" \"wait-on tcp:127.0.0.1:3000 && tsc --build tsconfig.server.json --force && node scripts/run-electron.mjs\"",
-    "electron-build": "next build && tsc --build tsconfig.server.json --force && electron-builder"
+    "electron-dev": "node scripts/dev-up.mjs",
+    "electron-build": "next build && tsc --build tsconfig.server.json --force && electron-builder",
+    "electron-smoke": "node scripts/smoke-packaged.mjs",
+    "electron-build-verified": "npm run electron-build && npm run electron-smoke"
   },
   "dependencies": {
     "clsx": "^2.1.1",

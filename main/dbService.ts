@@ -7,59 +7,133 @@ const dbPath = path.join(app.getPath('userData'), 'lazy_history.db');
 
 export const DBService = {
     db: null as sqlite3.Database | null,
+    initPromise: null as Promise<void> | null,
 
-    init(): void {
-        if (this.db) return;
+    init(): Promise<void> {
+        if (this.initPromise) return this.initPromise;
 
-        this.db = new sqlite3.Database(dbPath, (err) => {
-            if (err) {
-                console.error('Failed to connect to database', err);
-                return;
+        this.initPromise = new Promise((resolve, reject) => {
+            this.db = new sqlite3.Database(dbPath, async (err) => {
+                if (err) {
+                    console.error('Failed to connect to database', err);
+                    reject(err);
+                    return;
+                }
+
+                try {
+                    console.log('Connected to SQLite database at', dbPath);
+                    await this.runMigrations();
+                    resolve();
+                } catch (migrationError) {
+                    console.error('Failed to run DB migrations', migrationError);
+                    reject(migrationError);
+                }
+            });
+        });
+
+        return this.initPromise;
+    },
+
+    async runMigrations(): Promise<void> {
+        await this.run(`
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                id TEXT PRIMARY KEY,
+                applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        const appliedRows = await this.all<{ id: string }>('SELECT id FROM schema_migrations ORDER BY id ASC');
+        const applied = new Set(appliedRows.map((row) => row.id));
+
+        const migrations: Array<{ id: string; run: () => Promise<void> }> = [
+            {
+                id: '001_create_meetings',
+                run: async () => {
+                    await this.run(`
+                        CREATE TABLE IF NOT EXISTS meetings (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            title TEXT NOT NULL,
+                            transcript TEXT,
+                            summary TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `);
+                },
+            },
+            {
+                id: '002_create_work_stories',
+                run: async () => {
+                    await this.run(`
+                        CREATE TABLE IF NOT EXISTS work_stories (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            type TEXT NOT NULL,
+                            title TEXT,
+                            overview TEXT,
+                            output TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            parent_id INTEGER
+                        )
+                    `);
+                },
+            },
+            {
+                id: '003_add_work_stories_parent_id',
+                run: async () => {
+                    await this.addColumnIfMissing('work_stories', 'parent_id', 'INTEGER');
+                },
+            },
+            {
+                id: '004_add_work_stories_title',
+                run: async () => {
+                    await this.addColumnIfMissing('work_stories', 'title', 'TEXT');
+                },
+            },
+        ];
+
+        for (const migration of migrations) {
+            if (applied.has(migration.id)) continue;
+
+            console.log(`Applying migration: ${migration.id}`);
+            await this.run('BEGIN TRANSACTION');
+            try {
+                await migration.run();
+                await this.run('INSERT INTO schema_migrations (id) VALUES (?)', [migration.id]);
+                await this.run('COMMIT');
+            } catch (err) {
+                await this.run('ROLLBACK');
+                throw err;
             }
-            console.log('Connected to SQLite database at', dbPath);
-            this.createTables();
+        }
+    },
+
+    async addColumnIfMissing(tableName: string, columnName: string, definition: string): Promise<void> {
+        const columns = await this.all<{ name: string }>(`PRAGMA table_info(${tableName})`);
+        const hasColumn = columns.some((column) => column.name === columnName);
+        if (hasColumn) return;
+
+        await this.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+    },
+
+    run(sql: string, params: unknown[] = []): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+
+        return new Promise((resolve, reject) => {
+            db.run(sql, params, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
         });
     },
 
-    createTables(): void {
+    all<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
         const db = this.db;
-        if (!db) {
-            console.error('DB not initialized');
-            return;
-        }
+        if (!db) throw new Error('Database not initialized');
 
-        db.serialize(() => {
-            // Meetings Table
-            db.run(`
-                CREATE TABLE IF NOT EXISTS meetings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    transcript TEXT,
-                    summary TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            `);
-
-            // Work Stories Table
-            // Using ALTER TABLE for non-destructive migration in dev
-            db.run(`
-                CREATE TABLE IF NOT EXISTS work_stories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    type TEXT NOT NULL, -- 'story' or 'comment'
-                    title TEXT,
-                    overview TEXT,
-                    output TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    parent_id INTEGER
-                )
-            `);
-
-            // Attempt to add parent_id if it doesn't exist (for existing DBs)
-            db.run(`ALTER TABLE work_stories ADD COLUMN parent_id INTEGER`, () => {
-                // Ignore error if column already exists
-            });
-            db.run(`ALTER TABLE work_stories ADD COLUMN title TEXT`, () => {
-                // Ignore error if column already exists
+        return new Promise((resolve, reject) => {
+            db.all(sql, params, (err, rows) => {
+                if (err) reject(err);
+                else resolve((rows || []) as T[]);
             });
         });
     },

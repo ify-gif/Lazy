@@ -38,7 +38,7 @@ jobs:
 
       - name: Verify release quality gate (Windows)
         if: runner.os == 'Windows'
-        run: npm run release:verify
+        run: npm run verify:installer-config && npm run release:verify:ci
 
       - name: Verify release quality gate (macOS)
         if: runner.os == 'macOS'
@@ -48,10 +48,12 @@ jobs:
         if: runner.os == 'Windows'
         run: npm run electron-build -- --win nsis --publish always
         env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Publish (macOS)
         if: runner.os == 'macOS'
         run: npm run electron-build -- --mac dmg zip --publish always
         env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

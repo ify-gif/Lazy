@@ -62,10 +62,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test:e2e-core": "playwright test tests/core-flows.spec.ts --project=chromium --reporter=line",
+    "test:ipc-contract": "node --test tests/ipc-contract.test.mjs",
     "electron-dev": "node scripts/dev-up.mjs",
     "electron-build": "next build && tsc --build tsconfig.server.json --force && electron-builder",
     "electron-smoke": "node scripts/smoke-packaged.mjs",
-    "electron-build-verified": "npm run electron-build && npm run electron-smoke"
+    "electron-build-verified": "npm run electron-build && npm run electron-smoke",
+    "release:verify": "npm run lint && npm run typecheck && npm run test:ipc-contract && npm run test:e2e-core && npm run electron-build-verified"
   },
   "dependencies": {
     "clsx": "^2.1.1",

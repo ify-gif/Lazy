@@ -1,6 +1,6 @@
 {
   "name": "lazy-electron",
-  "version": "0.1.8",
+  "version": "1.0.0",
   "description": "Strategic Consultant Second Brain",
   "author": "Ify Gold",
   "private": true,
@@ -22,16 +22,21 @@
       "package.json"
     ],
     "nsis": {
-      "oneClick": true,
-      "perMachine": false,
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "LAZY",
       "artifactName": "${productName} Setup ${version}.${ext}",
+      "installerIcon": "public/app_icon_new.ico",
+      "installerHeaderIcon": "public/app_icon_new.ico",
       "uninstallDisplayName": "LAZY",
       "deleteAppDataOnUninstall": true,
-      "uninstallerIcon": "public/app_icon_new.ico"
+      "uninstallerIcon": "public/app_icon_new.ico",
+      "license": "LICENSE.txt"
     },
     "win": {
       "icon": "public/app_icon_new.ico",
@@ -58,6 +63,7 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "clean": "node scripts/clean.mjs",
+    "verify:installer-config": "node scripts/verify-installer-config.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -69,7 +75,8 @@
     "electron-build": "next build && tsc --build tsconfig.server.json --force && electron-builder",
     "electron-smoke": "node scripts/smoke-packaged.mjs",
     "electron-build-verified": "npm run electron-build && npm run electron-smoke",
-    "release:verify": "npm run lint && npm run typecheck && npm run test:ipc-contract && npm run test:e2e-core && npm run electron-build-verified",
+    "electron-build-fresh": "npm run clean && npm run verify:installer-config && npm run electron-build-verified",
+    "release:verify": "npm run lint && npm run typecheck && npm run verify:installer-config && npm run test:ipc-contract && npm run test:e2e-core && npm run electron-build-verified",
     "release:verify:ci": "npm run lint && npm run typecheck && npm run build && npm run test:ipc-contract && npm run test:e2e-core"
   },
   "dependencies": {
@@ -106,3 +113,4 @@
     "glob": "^9.0.0"
   }
 }
+

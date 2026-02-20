@@ -1,74 +1,148 @@
-LAZY — The Strategic Consultant Second Brain
+# LAZY
 
-LAZY is a high-end desktop application engineered for Business Analysts and Strategic Consultants. It transforms raw, rambled meeting recordings into high-value "Strategic Insights," acting as a permanent local second brain for your professional growth.
+LAZY is a desktop app for capturing meetings and turning them into structured, reusable work output.
 
----
+Built with Electron + Next.js, it runs locally, stores history in SQLite, and supports a BYOK setup for API usage.
 
-The Value Proposition
+## What It Does
 
-In a world of generic AI summaries, LAZY is built for depth. It doesn't just transcribe; it extracts strategic value, links follow-up comments to core insights, and maintains a secure, local history of your evolving professional logic.
+- Records and transcribes meeting sessions
+- Generates structured output from transcripts
+- Saves meeting history locally
+- Supports tracker workflows for follow-up items and story refinement
+- Provides desktop packaging and auto-update release metadata
 
-Key Pillars:
-- Bring Your Own Key (BYOK): Maximum privacy. Your API keys are stored securely on your machine. You control the cost and the data.
-- Strategic Evolution: Replaces flat "User Stories" with dynamic "Strategic Insights" and linked "Comment Chains."
-- Rock-Solid Hardware Integration: Built-in microphone calibration and real-time audio health checks ensure you never lose a transcription to silence.
-- Desktop Excellence: A premium Electron experience with custom title bars, real-time status indicators, and a professional "Breathing" update system.
+## Stack
 
----
+- Electron
+- Next.js 16 (App Router)
+- React 19
+- TypeScript
+- SQLite (`sqlite3`)
+- Playwright (core flow E2E)
 
-Core Features
+## Prerequisites
 
-Direct Executive Transcription
-Powered by OpenAI's Whisper (Large), LAZY provides industry-leading transcription accuracy. The "Direct Executive" prompt system ensures zero AI hallucination and eliminates conversational "fluff."
+- Node.js 20+
+- npm 10+
+- Windows (primary packaging target)
 
-Second Brain Knowledge Capture
-- Work Tracker: A dual-pane workbench for refining insights.
-- Deep Linking: Save "Strategic Comments" directly under their parent insights to maintain context over time.
-- Local Persistence: All data is stored in a structured SQLite database on your local disk. No cloud, no tracking.
+## Setup
 
-High-End Onboarding
-- Welcome Guide: A smart startup guide detects if you're a new user and walks you through the BYOK setup with zero friction.
-- Hardware Health: Integrated waveform visualizers and "Quick Tests" verify your microphone is ready before you start recording.
-
----
-
-Technical Setup
-
-Prerequisites
-- Node.js (v18+)
-- An OpenAI API Key
-
-Development
 ```bash
-# Install dependencies
-npm install
+npm ci
+```
 
-# Start the dev environment
+## Development
+
+```bash
 npm run electron-dev
 ```
 
-Production Build
+This starts Next.js and Electron together using the hardened startup script.
+
+## Build and Package
+
 ```bash
-# Package the application for Windows
 npm run electron-build
 ```
 
----
+Verified package build + smoke check:
 
-Professional Updates
-LAZY features a professional **Breathing Pill** update system.
-1. Pulsing Green: You are on the state-of-the-art version.
-2. Pulsing Red: A specific update is available.
-3. Pulsing Purple: Update downloaded and ready for one-click restart.
+```bash
+npm run electron-build-verified
+```
 
----
+Fresh installer build (cleans all prior build artifacts first):
 
-Privacy First
-LAZY is designed for professionals in sensitive environments. 
-- No Analytics: We don't track what you record or what the AI generates.
-- Local First: Your database never leaves your machine.
-- Encrypted Keys: API keys are managed via secure storage provided by the OS.
+```bash
+npm run electron-build-fresh
+```
 
----
+## Quality Gates
 
-Built with Precision for the Professional Strategist.
+Local full release verification:
+
+```bash
+npm run release:verify
+```
+
+CI verification (no installer packaging step):
+
+```bash
+npm run release:verify:ci
+```
+
+Included checks:
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test:ipc-contract`
+- `npm run test:e2e-core`
+- Packaging + smoke (`release:verify` only)
+
+## Testing
+
+IPC/data contract tests:
+
+```bash
+npm run test:ipc-contract
+```
+
+Core UI flow tests:
+
+```bash
+npm run test:e2e-core
+```
+
+## Release Artifacts
+
+`electron-builder` outputs to `release/`, including:
+
+- `LAZY Setup <version>.exe`
+- `LAZY Setup <version>.exe.blockmap`
+- `latest.yml`
+- `win-unpacked/`
+
+## Windows Installer (NSIS)
+
+The Windows installer is built with NSIS and configured for a professional install flow:
+
+- Wizard-style installer (not one-click)
+- Installs per-machine (Program Files)
+- Start Menu shortcut
+- Desktop shortcut
+- Add/Remove Programs registration
+- Uninstaller
+- Custom installer/uninstaller icon
+- License agreement screen
+- Launch option after install
+
+## Project Structure
+
+- `app/` - Next.js UI routes and components
+- `main/` - Electron main process and DB service
+- `scripts/` - dev startup, cleanup, smoke validation scripts
+- `tests/` - Playwright + Node contract tests
+- `.github/workflows/` - CI quality and release workflows
+
+## CI/CD
+
+- `Quality Gate` workflow runs on push/PR to `main`/`master`
+- `Release` workflow runs on `v*` tags and publishes artifacts
+- `Security Audit and Build Check` runs production-focused audit and build checks
+
+## Notes
+
+- App entrypoint is `dist-electron/main.js`
+- If dev startup fails on port 3000, stop conflicting process and rerun `npm run electron-dev`
+- If Electron cannot find `dist-electron/main.js`, run a clean compile via:
+
+```bash
+npm run clean
+npm run electron-dev
+```
+
+## License
+
+Private project. All rights reserved.

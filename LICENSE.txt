@@ -1,0 +1,26 @@
+LAZY End User License Agreement (EULA)
+
+Copyright (c) 2026 Ify Gold. All rights reserved.
+
+By installing or using LAZY, you agree to the following:
+
+1. License Grant
+You are granted a limited, non-exclusive, non-transferable license to use LAZY for personal or internal business use.
+
+2. Restrictions
+You may not reverse engineer, redistribute, sublicense, sell, or create derivative works of LAZY without prior written permission.
+
+3. Data and Privacy
+LAZY stores local application data on your device. You are responsible for safeguarding your own environment and credentials.
+
+4. No Warranty
+LAZY is provided "as is" without warranties of any kind, express or implied, including merchantability or fitness for a particular purpose.
+
+5. Limitation of Liability
+To the fullest extent permitted by law, the author shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from use of LAZY.
+
+6. Termination
+This license terminates automatically if you violate these terms.
+
+7. Governing Terms
+Use of LAZY is subject to applicable local laws and regulations.

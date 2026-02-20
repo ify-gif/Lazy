@@ -25,6 +25,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [updateStatus, setUpdateStatus] = useState<string>("Up to date");
     const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isUpdateDownloaded, setIsUpdateDownloaded] = useState(false);
     const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'uptodate' | 'error' | 'available'>('idle');
 
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -183,11 +184,13 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const checkUpdates = async () => {
         setUpdateStatus("Checking...");
         setCheckStatus('checking');
+        setIsUpdateDownloaded(false);
         try {
             const result = await window.electron.updates.check() as UpdateCheckResult;
             if (!result || !result.updateInfo) {
                 setUpdateStatus("You are on the latest version.");
                 setIsUpdateAvailable(false);
+                setIsUpdateDownloaded(false);
                 setCheckStatus('uptodate');
                 setTimeout(() => setCheckStatus('idle'), 3000);
             } else {
@@ -203,12 +206,14 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
 
     const handleDownloadUpdate = async () => {
         setIsDownloading(true);
+        setIsUpdateDownloaded(false);
         setUpdateStatus("Downloading...");
         try {
             await window.electron.updates.download();
         } catch (err) {
             setUpdateStatus("Download failed.");
             setIsDownloading(false);
+            setIsUpdateDownloaded(false);
             console.error(err);
         }
     };
@@ -226,11 +231,13 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                         setUpdateStatus("New version available.");
                     }
                     setIsUpdateAvailable(true);
+                    setIsUpdateDownloaded(false);
                     setCheckStatus('available');
                     break;
                 case 'update-not-available':
                     setUpdateStatus("You are on the latest version.");
                     setIsUpdateAvailable(false);
+                    setIsUpdateDownloaded(false);
                     setCheckStatus('idle');
                     break;
                 case 'download-progress':
@@ -242,10 +249,12 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                     setUpdateStatus("Update ready to install.");
                     setIsUpdateAvailable(true);
                     setIsDownloading(false);
+                    setIsUpdateDownloaded(true);
                     break;
                 case 'error':
                     setUpdateStatus("Update problem. Please try again.");
                     setIsDownloading(false);
+                    setIsUpdateDownloaded(false);
                     break;
             }
         });
@@ -397,12 +406,12 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                 <Button
                                     variant="destructive"
                                     size="sm"
-                                    onClick={updateStatus.includes("ready") ? () => window.electron.updates.install() : handleDownloadUpdate}
+                                    onClick={isUpdateDownloaded ? () => window.electron.updates.install() : handleDownloadUpdate}
                                     disabled={isDownloading}
                                     className="px-4 py-1 animate-pulse"
                                 >
                                     <RefreshCw size={12} className={`mr-1.5 ${isDownloading ? 'animate-spin' : ''}`} />
-                                    {isDownloading ? "Downloading..." : updateStatus.includes("ready") ? "Restart Now" : "Download"}
+                                    {isDownloading ? "Downloading..." : isUpdateDownloaded ? "Restart Now" : "Download"}
                                 </Button>
                             ) : (
                                 <Button

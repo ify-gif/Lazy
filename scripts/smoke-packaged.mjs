@@ -31,8 +31,8 @@ function runSmoke() {
 
   assertDir(releaseDir, "release output directory");
 
-  const setupExe = resolve(releaseDir, `${productName} Setup ${version}.exe`);
-  const blockmap = resolve(releaseDir, `${productName} Setup ${version}.exe.blockmap`);
+  const setupExe = resolve(releaseDir, `${productName}-Setup-${version}.exe`);
+  const blockmap = resolve(releaseDir, `${productName}-Setup-${version}.exe.blockmap`);
   const latestYml = resolve(releaseDir, "latest.yml");
   const unpackedDir = resolve(releaseDir, "win-unpacked");
   const appExe = resolve(unpackedDir, `${productName}.exe`);
@@ -55,4 +55,3 @@ try {
   console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 }
-

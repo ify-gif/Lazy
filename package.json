@@ -30,7 +30,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "LAZY",
-      "artifactName": "${productName} Setup ${version}.${ext}",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "installerIcon": "public/app_icon_new.ico",
       "installerHeaderIcon": "public/app_icon_new.ico",
       "uninstallDisplayName": "LAZY",

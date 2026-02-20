@@ -1,0 +1,5 @@
+# Default owners for all files
+* @ify-gif
+
+# CI/workflows require explicit owner review
+.github/workflows/* @ify-gif

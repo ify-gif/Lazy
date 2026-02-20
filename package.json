@@ -1,6 +1,6 @@
 {
   "name": "lazy-electron",
-  "version": "1.0.0",
+  "version": "1.0.8",
   "description": "Strategic Consultant Second Brain",
   "author": "Ify Gold",
   "private": true,
@@ -113,4 +113,3 @@
     "glob": "^9.0.0"
   }
 }
-

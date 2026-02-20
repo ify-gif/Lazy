@@ -1,4 +1,8 @@
-import pkg from "../package.json" with { type: "json" };
+import { readFileSync } from "fs";
+
+const pkg = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+);
 
 function fail(message) {
   console.error(`Installer config check failed: ${message}`);

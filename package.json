@@ -69,7 +69,8 @@
     "electron-build": "next build && tsc --build tsconfig.server.json --force && electron-builder",
     "electron-smoke": "node scripts/smoke-packaged.mjs",
     "electron-build-verified": "npm run electron-build && npm run electron-smoke",
-    "release:verify": "npm run lint && npm run typecheck && npm run test:ipc-contract && npm run test:e2e-core && npm run electron-build-verified"
+    "release:verify": "npm run lint && npm run typecheck && npm run test:ipc-contract && npm run test:e2e-core && npm run electron-build-verified",
+    "release:verify:ci": "npm run lint && npm run typecheck && npm run build && npm run test:ipc-contract && npm run test:e2e-core"
   },
   "dependencies": {
     "clsx": "^2.1.1",

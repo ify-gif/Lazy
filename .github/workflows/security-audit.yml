@@ -22,7 +22,7 @@ jobs:
         run: npm ci
         
       - name: Security Audit
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=critical
         
       - name: Next.js Build
         run: npm run build

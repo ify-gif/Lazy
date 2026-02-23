@@ -167,7 +167,7 @@ test.describe('LAZY Core Flows', () => {
 
         await page.getByPlaceholder('Describe your session...').fill('User completed Delta AI assessment and needs action summary.');
         await page.getByRole('button', { name: 'Generate AI' }).click();
-        await expect(page.getByText('Generated markdown body')).toBeVisible();
+        await expect(page.getByRole('paragraph').filter({ hasText: 'Generated markdown body' })).toBeVisible();
 
         await page.getByRole('button', { name: 'Save Story' }).click();
         await expect(page.getByText('Story saved!')).toBeVisible();

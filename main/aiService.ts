@@ -21,23 +21,25 @@ CRITICAL STRIKE RULES (DO NOT VIOLATE):
 ZERO META-COMMENTARY: NEVER use the words "transcript," "recording," "speaker," "audio," or "text." Do NOT write "The transcript reveals..." or "In this meeting...". Act as if you are documenting facts natively.
 NO CONSULTANT JARGON: NEVER use words like "Strategically," "Core opportunity," or "Multifunctional." Speak in plain, direct, sharp business English.
 NO DENSE PARAGRAPHS: You must use the exact Markdown formatting below. Do not output massive walls of text.
+RICH-TEXT MARKDOWN ONLY: Use markdown headers and bullet points exactly as specified.
 
 REQUIRED OUTPUT FORMAT:
-TL;DR
-A brutal, 1-sentence bottom-line of the entire meeting.
+## TL;DR
+- A brutal, 1-sentence bottom-line of the entire meeting.
 
-Summary
-A direct, 1-2 sentence overview of the meeting's purpose and main topic.
+## Summary
+- A direct, 1-2 sentence overview of the meeting's purpose and main topic.
 
-Key Discussion Points
-Capture the core facts, features, technical details, and problems discussed.
-Use clean, context-rich bullet points.
+## Key Discussion Points
+- Capture the core facts, features, technical details, and problems discussed.
+- Use clean, context-rich bullet points.
 
-Action Items
-Extract specific tasks, next steps, or assignments. If none, write: "No specific action items assigned."
+## Action Items
+- Extract specific tasks, next steps, or assignments.
+- If none, write exactly: "- No specific action items assigned."
 
-Conclusion
-A brief 1-sentence wrap-up.
+## Conclusion
+- A brief 1-sentence wrap-up.
 
 Transcript:
 ${transcript}`,
@@ -47,18 +49,19 @@ You are a highly efficient, invisible technical assistant. Convert raw audio dic
 ABSOLUTE RULES:
 NO META-COMMENTARY. NO EMOJIS. NO AGILE TEMPLATES.
 
-REQUIRED FORMAT:
-Summary
-A single, short, punchy sentence that acts as the Title.
+REQUIRED FORMAT (MARKDOWN RICH TEXT):
+## Summary
+- A single, short, punchy sentence that acts as the Title.
 
-Description
-Clean, context-rich breakdown using concise bullet points.
+## Description
+- Clean, context-rich breakdown using concise bullet points.
 
-Acceptance Criteria
-Scout for conditions of success. Format as clear bullet points.
+## Acceptance Criteria
+- Scout for conditions of success. Format as clear bullet points.
 
-Action Items
-Extract specific next steps or blockers.
+## Action Items
+- Extract specific next steps or blockers.
+- If none, write exactly: "- None".
 
 Raw Input:
 ${overview}`,
@@ -136,7 +139,7 @@ export const AIService = {
         }
 
         const response = await this._callGPT(PROMPTS.workStory(overview));
-        const summary = overview.split(' ').slice(0, 10).join(' ') + "...";
+        const summary = this._extractSummaryFromMarkdown(response) || (overview.split(' ').slice(0, 10).join(' ') + "...");
         return { summary, description: response };
     },
 
@@ -195,5 +198,11 @@ export const AIService = {
             if (i < retries) await new Promise(res => setTimeout(res, 1000 * (i + 1)));
         }
         throw new Error(`Fetch failed after ${retries} retries`);
-    }
+    },
+
+    _extractSummaryFromMarkdown(markdown: string): string | null {
+        const summaryHeaderMatch = markdown.match(/##\s*Summary\s*[\r\n]+(?:-\s*)?(.+)/i);
+        if (!summaryHeaderMatch?.[1]) return null;
+        return summaryHeaderMatch[1].trim();
+    },
 };

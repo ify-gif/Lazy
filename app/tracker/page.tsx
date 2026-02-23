@@ -264,7 +264,7 @@ export default function TrackerPage() {
     const handleSaveStory = async () => {
         if (!summary || !window.electron?.db) return;
         try {
-            const output = jiraStory ? `SUMMARY: ${jiraStory.summary}\n\n${jiraStory.description}` : summary;
+            const output = jiraStory ? jiraStory.description : summary;
             const storyTitle = buildStoryTitle(overview, output, jiraStory?.summary);
 
             // If saving a comment, we need a parent story
@@ -710,7 +710,7 @@ export default function TrackerPage() {
                         </div>
                         <div className="flex-1 p-2 overflow-y-auto bg-background/50 text-xs">
                             {summary ? (
-                                <div className="prose prose-xs dark:prose-invert max-w-none">
+                                <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:text-base prose-li:my-1">
                                     <ReactMarkdown>{summary}</ReactMarkdown>
                                 </div>
                             ) : (

@@ -500,7 +500,7 @@ export default function MeetingPage() {
 
                     <div className="flex-1 p-3 overflow-y-auto bg-background/50 text-sm leading-relaxed text-foreground">
                         {summary ? (
-                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                            <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:text-base prose-li:my-1">
                                 <ReactMarkdown>{summary}</ReactMarkdown>
                             </div>
                         ) : (

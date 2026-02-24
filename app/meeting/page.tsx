@@ -269,13 +269,16 @@ export default function MeetingPage() {
 
     const inlineMarkdownToHtml = (line: string) => {
         const escaped = escapeHtml(line);
-        return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+        return escaped
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            .replace(/\*(.+?)\*/g, "<em>$1</em>");
     };
 
     const markdownToHtml = (markdown: string) => {
         const lines = markdown.split(/\r?\n/);
         const html: string[] = [];
         let inList = false;
+        const sectionHeaderRegex = /^(tl;dr|summary|key discussion points|description|acceptance criteria|action items|conclusion)\s*:?\s*$/i;
 
         for (const rawLine of lines) {
             const line = rawLine.trim();
@@ -287,21 +290,45 @@ export default function MeetingPage() {
                 continue;
             }
 
-            if (line.startsWith("## ")) {
+            const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+            if (headingMatch) {
                 if (inList) {
                     html.push("</ul>");
                     inList = false;
                 }
-                html.push(`<h2>${inlineMarkdownToHtml(line.slice(3))}</h2>`);
+                const headingText = headingMatch[2].trim();
+                html.push(`<h2>${inlineMarkdownToHtml(headingText)}</h2>`);
                 continue;
             }
 
-            if (line.startsWith("- ")) {
+            const boldHeadingMatch = line.match(/^\*\*(.+?)\*\*:?\s*$/);
+            if (boldHeadingMatch) {
+                if (inList) {
+                    html.push("</ul>");
+                    inList = false;
+                }
+                html.push(`<h2>${inlineMarkdownToHtml(boldHeadingMatch[1].trim())}</h2>`);
+                continue;
+            }
+
+            if (sectionHeaderRegex.test(line)) {
+                if (inList) {
+                    html.push("</ul>");
+                    inList = false;
+                }
+                html.push(`<h2>${inlineMarkdownToHtml(line.replace(/:$/, "").trim())}</h2>`);
+                continue;
+            }
+
+            const bulletMatch = line.match(/^[-*•]\s+(.+)$/);
+            const orderedMatch = line.match(/^\d+\.\s+(.+)$/);
+            if (bulletMatch || orderedMatch) {
                 if (!inList) {
                     html.push("<ul>");
                     inList = true;
                 }
-                html.push(`<li>${inlineMarkdownToHtml(line.slice(2))}</li>`);
+                const itemText = (bulletMatch?.[1] || orderedMatch?.[1] || "").trim();
+                html.push(`<li>${inlineMarkdownToHtml(itemText)}</li>`);
                 continue;
             }
 

@@ -44,6 +44,7 @@ export default function TrackerPage() {
     const chunksRef = useRef<Blob[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const outputEditorRef = useRef<HTMLDivElement | null>(null);
+    const syncingOutputRef = useRef(false);
 
     // VAD Refs
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -513,13 +514,13 @@ export default function TrackerPage() {
                 continue;
             }
 
-            const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+            const headingMatch = line.match(/^#{1,6}\s*(.+)$/);
             if (headingMatch) {
                 if (inList) {
                     html.push("</ul>");
                     inList = false;
                 }
-                const headingText = headingMatch[2].trim();
+                const headingText = headingMatch[1].trim();
                 html.push(`<h2>${inlineMarkdownToHtml(headingText)}</h2>`);
                 continue;
             }
@@ -601,7 +602,11 @@ export default function TrackerPage() {
         if (!outputEditorRef.current) return;
         const html = markdownToHtml(summary);
         if (outputEditorRef.current.innerHTML !== html) {
+            syncingOutputRef.current = true;
             outputEditorRef.current.innerHTML = html;
+            queueMicrotask(() => {
+                syncingOutputRef.current = false;
+            });
         }
     }, [summary]);
 
@@ -839,9 +844,10 @@ export default function TrackerPage() {
                                         contentEditable
                                         suppressContentEditableWarning
                                         onInput={(e) => {
+                                            if (syncingOutputRef.current) return;
                                             setSummary(htmlToMarkdown((e.currentTarget as HTMLDivElement).innerHTML));
                                         }}
-                                        className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:text-base prose-li:my-1 min-h-[220px] focus:outline-none"
+                                        className="prose prose-sm dark:prose-invert max-w-none min-h-[220px] focus:outline-none [&_h2]:text-base [&_h2]:font-bold [&_h2]:mt-3 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:my-1"
                                     />
                                 </div>
                             ) : (

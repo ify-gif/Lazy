@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
     Mic, Plus, Trash2, Copy, Download, Search, Pencil, Check, X
 } from "lucide-react";
-import ReactMarkdown from 'react-markdown';
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
@@ -44,6 +43,7 @@ export default function TrackerPage() {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const outputEditorRef = useRef<HTMLDivElement | null>(null);
 
     // VAD Refs
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -482,6 +482,102 @@ export default function TrackerPage() {
         }
     };
 
+    const escapeHtml = (input: string) =>
+        input
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+
+    const inlineMarkdownToHtml = (line: string) => {
+        const escaped = escapeHtml(line);
+        return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    };
+
+    const markdownToHtml = (markdown: string) => {
+        const lines = markdown.split(/\r?\n/);
+        const html: string[] = [];
+        let inList = false;
+
+        for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) {
+                if (inList) {
+                    html.push("</ul>");
+                    inList = false;
+                }
+                continue;
+            }
+
+            if (line.startsWith("## ")) {
+                if (inList) {
+                    html.push("</ul>");
+                    inList = false;
+                }
+                html.push(`<h2>${inlineMarkdownToHtml(line.slice(3))}</h2>`);
+                continue;
+            }
+
+            if (line.startsWith("- ")) {
+                if (!inList) {
+                    html.push("<ul>");
+                    inList = true;
+                }
+                html.push(`<li>${inlineMarkdownToHtml(line.slice(2))}</li>`);
+                continue;
+            }
+
+            if (inList) {
+                html.push("</ul>");
+                inList = false;
+            }
+            html.push(`<p>${inlineMarkdownToHtml(line)}</p>`);
+        }
+
+        if (inList) html.push("</ul>");
+        return html.join("");
+    };
+
+    const htmlToMarkdown = (html: string) => {
+        if (typeof window === "undefined") return "";
+        const container = document.createElement("div");
+        container.innerHTML = html;
+        const lines: string[] = [];
+
+        const pushBlock = (value: string) => {
+            const trimmed = value.trim();
+            if (trimmed) lines.push(trimmed);
+            lines.push("");
+        };
+
+        Array.from(container.children).forEach((el) => {
+            const tag = el.tagName.toLowerCase();
+            if (tag === "h2") {
+                pushBlock(`## ${el.textContent || ""}`);
+                return;
+            }
+            if (tag === "ul") {
+                Array.from(el.querySelectorAll("li")).forEach((li) => {
+                    lines.push(`- ${(li.textContent || "").trim()}`);
+                });
+                lines.push("");
+                return;
+            }
+            pushBlock(el.textContent || "");
+        });
+
+        return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    };
+
+    useEffect(() => {
+        if (!outputEditorRef.current) return;
+        const html = markdownToHtml(summary);
+        if (outputEditorRef.current.innerHTML !== html) {
+            outputEditorRef.current.innerHTML = html;
+        }
+    }, [summary]);
+
     return (
         <div className="flex h-full flex-col bg-background text-foreground font-sans overflow-hidden">
             {/* --- TOP BRAND BAR --- */}
@@ -708,22 +804,18 @@ export default function TrackerPage() {
                                 )}
                             </div>
                         </div>
-                        <div className="flex-1 p-2 overflow-hidden bg-background/50 text-xs">
+                        <div className="flex-1 p-2 overflow-y-auto bg-background/50 text-xs">
                             {summary ? (
-                                <div className="h-full flex flex-col gap-2">
-                                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Edit Output (Markdown)</div>
-                                    <textarea
-                                        value={summary}
-                                        onChange={(e) => setSummary(e.target.value)}
-                                        className="h-1/2 w-full resize-none rounded-md border border-border bg-background p-2 text-xs leading-relaxed text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                                        placeholder="Edit generated output..."
+                                <div className="rounded-md border border-border bg-background p-2">
+                                    <div
+                                        ref={outputEditorRef}
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        onInput={(e) => {
+                                            setSummary(htmlToMarkdown((e.currentTarget as HTMLDivElement).innerHTML));
+                                        }}
+                                        className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:text-base prose-li:my-1 min-h-[220px] focus:outline-none"
                                     />
-                                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Live Preview</div>
-                                    <div className="flex-1 overflow-y-auto rounded-md border border-border bg-background p-2">
-                                        <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:text-base prose-li:my-1">
-                                            <ReactMarkdown>{summary}</ReactMarkdown>
-                                        </div>
-                                    </div>
                                 </div>
                             ) : (
                                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-[10px] text-center px-4 opacity-50">

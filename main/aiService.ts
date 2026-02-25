@@ -187,17 +187,31 @@ export const AIService = {
     },
 
     async _fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+        let lastError: Error | null = null;
+
         for (let i = 0; i < retries + 1; i++) {
             try {
                 const response = await fetch(url, options);
                 if (response.ok) return response;
-                if (response.status !== 429 && response.status < 500) break;
-            } catch (error) {
-                if (i === retries) throw error;
+
+                const responseBody = await response.text().catch(() => '');
+                const compactBody = responseBody.replace(/\s+/g, ' ').trim();
+                const bodySuffix = compactBody ? ` Body: ${compactBody.slice(0, 300)}` : '';
+                lastError = new Error(`HTTP ${response.status} ${response.statusText}.${bodySuffix}`);
+
+                const shouldRetry = response.status === 429 || response.status >= 500;
+                if (!shouldRetry || i === retries) break;
+            } catch (error: unknown) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                if (i === retries) break;
             }
-            if (i < retries) await new Promise(res => setTimeout(res, 1000 * (i + 1)));
+
+            if (i < retries) {
+                await new Promise(res => setTimeout(res, 1000 * (i + 1)));
+            }
         }
-        throw new Error(`Fetch failed after ${retries} retries`);
+
+        throw new Error(`Fetch failed after ${retries} retries: ${lastError?.message || 'Unknown error'}`);
     },
 
     _extractSummaryFromMarkdown(markdown: string): string | null {

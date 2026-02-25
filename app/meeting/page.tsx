@@ -12,6 +12,7 @@ type AudioContextCtor = typeof AudioContext;
 type ExtendedWindow = Window & { webkitAudioContext?: AudioContextCtor };
 const SILENCE_THRESHOLD = 6;
 const DEFAULT_MEETING_TITLE = "Untitled Meeting";
+const TRANSCRIBE_CHUNK_MS = 5 * 60 * 1000;
 
 export default function MeetingPage() {
     const router = useRouter();
@@ -76,7 +77,9 @@ export default function MeetingPage() {
     };
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const chunksRef = useRef<Blob[]>([]);
+    const currentChunkPartsRef = useRef<Blob[]>([]);
+    const currentChunkDurationMsRef = useRef(0);
+    const finalizedChunksRef = useRef<Blob[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const outputEditorRef = useRef<HTMLDivElement | null>(null);
     const syncingOutputRef = useRef(false);
@@ -144,6 +147,80 @@ export default function MeetingPage() {
         analyserRef.current = null;
     };
 
+    const flushRecordingChunk = (force = false) => {
+        if (currentChunkPartsRef.current.length === 0) return;
+        if (!force && currentChunkDurationMsRef.current < TRANSCRIBE_CHUNK_MS) return;
+
+        const chunkBlob = new Blob(currentChunkPartsRef.current, { type: "audio/webm" });
+        finalizedChunksRef.current.push(chunkBlob);
+        currentChunkPartsRef.current = [];
+        currentChunkDurationMsRef.current = 0;
+    };
+
+    const setTranscriptionErrorStatus = (message: string) => {
+        if (message.includes('API Key not found')) {
+            window.electron?.settings?.sendStatus('error', 'NO API KEY');
+            return;
+        }
+        if (message.includes('Whisper API failed')) {
+            window.electron?.settings?.sendStatus('error', 'WHISPER API ERROR');
+            return;
+        }
+        window.electron?.settings?.sendStatus('error', 'AI FAILED');
+    };
+
+    const transcribeFinalizedChunks = async () => {
+        if (!window.electron?.ai) return;
+
+        setIsProcessing(true);
+        window.electron?.settings?.sendStatus('processing', 'Transcribing...');
+
+        let mergedTranscript = "";
+        let failedChunks = 0;
+        let lastErrorMessage = "";
+
+        try {
+            const totalChunks = finalizedChunksRef.current.length;
+            for (let i = 0; i < totalChunks; i++) {
+                const chunk = finalizedChunksRef.current[i];
+                try {
+                    const arrayBuffer = await chunk.arrayBuffer();
+                    const text = await window.electron.ai.transcribe(arrayBuffer);
+                    if (!text || !text.trim()) {
+                        throw new Error("Transcription returned empty result");
+                    }
+
+                    mergedTranscript = mergedTranscript
+                        ? `${mergedTranscript}\n${text.trim()}`
+                        : text.trim();
+                    setTranscript(mergedTranscript);
+                } catch (err: unknown) {
+                    failedChunks += 1;
+                    lastErrorMessage = err instanceof Error ? err.message : "Transcription failed";
+                    console.error(`Chunk ${i + 1}/${totalChunks} transcription failed`, err);
+                }
+            }
+
+            if (!mergedTranscript) {
+                const msg = lastErrorMessage || "Transcription failed";
+                setTranscript(`Error: ${msg}`);
+                setTranscriptionErrorStatus(msg);
+                return;
+            }
+
+            if (failedChunks > 0) {
+                const totalChunks = finalizedChunksRef.current.length;
+                setAlertMessage(`Partial transcript ready. ${failedChunks} of ${totalChunks} chunk(s) failed.`);
+                window.electron?.settings?.sendStatus('warning', 'Partial transcript ready');
+            } else {
+                window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
+            }
+        } finally {
+            setIsProcessing(false);
+            finalizedChunksRef.current = [];
+        }
+    };
+
     const handleToggleRecording = async () => {
         if (!isRecording) {
             // Prevent recording if session is not empty
@@ -168,10 +245,16 @@ export default function MeetingPage() {
                 const options = { mimeType: 'audio/webm' };
                 const recorder = new MediaRecorder(mediaStream, options);
                 mediaRecorderRef.current = recorder;
-                chunksRef.current = [];
+                currentChunkPartsRef.current = [];
+                currentChunkDurationMsRef.current = 0;
+                finalizedChunksRef.current = [];
+                setTranscript("");
 
                 recorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) chunksRef.current.push(e.data);
+                    if (e.data.size === 0) return;
+                    currentChunkPartsRef.current.push(e.data);
+                    currentChunkDurationMsRef.current += 1000;
+                    flushRecordingChunk(false);
                 };
 
                 recorder.onstop = async () => {
@@ -185,9 +268,8 @@ export default function MeetingPage() {
                         return;
                     }
 
-                    const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-                    const arrayBuffer = await blob.arrayBuffer();
-                    processAudio(arrayBuffer);
+                    flushRecordingChunk(true);
+                    await transcribeFinalizedChunks();
 
                     // Stop all tracks
                     mediaStream.getTracks().forEach(t => t.stop());
@@ -205,39 +287,6 @@ export default function MeetingPage() {
             mediaRecorderRef.current?.stop();
             setIsRecording(false);
             window.electron?.settings?.sendStatus('processing', 'Processing Audio...');
-        }
-    };
-
-    const processAudio = async (arrayBuffer: ArrayBuffer) => {
-        if (!window.electron?.ai) return;
-
-        setIsProcessing(true);
-        let hadError = false;
-        window.electron?.settings?.sendStatus('processing', 'Transcribing...');
-        try {
-            // 1. Transcribe (Whisper)
-            const text = await window.electron.ai?.transcribe(arrayBuffer);
-            if (!text) throw new Error("Transcription returned empty result");
-            setTranscript(text);
-
-            window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
-        } catch (err: unknown) {
-            hadError = true;
-            console.error("AI Processing failed", err);
-            const msg = err instanceof Error ? err.message : 'AI Failed';
-            setTranscript("Error: " + msg);
-            if (msg.includes('API Key not found')) {
-                window.electron?.settings?.sendStatus('error', 'NO API KEY');
-            } else if (msg.includes('Whisper API failed')) {
-                window.electron?.settings?.sendStatus('error', 'WHISPER API ERROR');
-            } else {
-                window.electron?.settings?.sendStatus('error', 'AI FAILED');
-            }
-        } finally {
-            setIsProcessing(false);
-            if (!hadError) {
-                window.electron?.settings?.sendStatus('ready', 'Ready');
-            }
         }
     };
 

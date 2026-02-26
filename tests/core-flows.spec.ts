@@ -23,6 +23,13 @@ async function installElectronMock(page: Page) {
             nextId: 2,
         };
 
+        const settingsState: Record<string, string> = {
+            selectedMic: '',
+            releaseNotesSeenVersion: '0.1.8',
+            lastRunVersion: '0.1.8',
+            pendingReleaseNotesVersion: '',
+        };
+
         const nowIso = () => new Date().toISOString();
         const nextId = () => state.nextId++;
 
@@ -69,10 +76,10 @@ async function installElectronMock(page: Page) {
                 close: () => { },
             },
             settings: {
-                setApiKey: () => { },
+                setApiKey: (key: string) => { settingsState.apiKey = key; },
                 getApiKey: async () => 'mock-api-key',
-                set: () => { },
-                get: async () => '',
+                set: (key: string, value: string) => { settingsState[key] = value; },
+                get: async (key: string) => settingsState[key] ?? '',
                 getVersion: async () => '0.1.8',
                 sendStatus: () => { },
                 onStatusChange: () => () => { },

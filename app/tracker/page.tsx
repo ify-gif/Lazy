@@ -795,7 +795,7 @@ export default function TrackerPage() {
 
                                 <button
                                     onClick={handleNewSession}
-                                    className="absolute left-1/2 -translate-x-1/2 h-7 px-2 text-[10px] font-bold italic uppercase tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 hover:opacity-80 transition-opacity"
+                                    className="absolute left-1/2 -translate-x-1/2 h-7 px-2 text-[10px] font-bold italic uppercase tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 cursor-pointer hover:text-green-700 dark:hover:text-green-300 hover:opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 rounded-sm"
                                     title="Start New Session"
                                 >
                                     New Session

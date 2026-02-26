@@ -26,21 +26,49 @@ export default function ReleaseNotesModal() {
                     settings.get("pendingReleaseNotesVersion"),
                 ]);
 
+                const [apiKey, selectedMic] = await Promise.all([
+                    settings.getApiKey().catch(() => ""),
+                    settings.get("selectedMic").catch(() => ""),
+                ]);
+
+                let hasSavedContent = false;
+                if (window.electron?.db) {
+                    const [meetings, stories] = await Promise.all([
+                        window.electron.db.getMeetings().catch(() => []),
+                        window.electron.db.getWorkStories().catch(() => []),
+                    ]);
+                    hasSavedContent = meetings.length > 0 || stories.length > 0;
+                }
+
+                const likelyExistingUser =
+                    !!apiKey || !!selectedMic || hasSavedContent;
+
                 const updatedFromPreviousRun = !!lastRunVersion && lastRunVersion !== currentVersion;
                 const pendingForThisVersion =
                     !!pendingReleaseNotesVersion && pendingReleaseNotesVersion === currentVersion;
+
+                // Migration path:
+                // pre-release-note builds won't have lastRunVersion/pendingReleaseNotesVersion keys.
+                // If the profile has prior usage, show notes once instead of silently marking seen.
+                if (!lastRunVersion && !pendingForThisVersion) {
+                    settings.set("lastRunVersion", currentVersion);
+
+                    if (likelyExistingUser && seenVersion !== currentVersion && !isCancelled) {
+                        setNote(getReleaseNote(currentVersion));
+                        setIsOpen(true);
+                        return;
+                    }
+
+                    // Fresh profile: initialize silently.
+                    settings.set("releaseNotesSeenVersion", currentVersion);
+                    return;
+                }
 
                 const shouldShow =
                     (pendingForThisVersion || updatedFromPreviousRun) &&
                     seenVersion !== currentVersion;
 
                 settings.set("lastRunVersion", currentVersion);
-
-                // First launch on a machine/profile should not show release notes.
-                if (!lastRunVersion && !pendingForThisVersion) {
-                    settings.set("releaseNotesSeenVersion", currentVersion);
-                    return;
-                }
 
                 if (shouldShow && !isCancelled) {
                     setNote(getReleaseNote(currentVersion));

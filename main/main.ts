@@ -206,6 +206,9 @@ autoUpdater.on('checking-for-update', () => {
 
 autoUpdater.on('update-available', (info) => {
     logger.info(`Update v${info.version} available`);
+    if (info.version) {
+        Store.set('pendingReleaseNotesVersion', info.version);
+    }
     broadcastStatus('ready', `Update v${info.version} available`);
     // Send specifically for the Update Pill
     broadcastUpdateEvent('update-available', info);

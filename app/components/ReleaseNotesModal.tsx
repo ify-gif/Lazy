@@ -5,8 +5,6 @@ import Button from "./Button";
 import Modal from "./Modal";
 import { getReleaseNote, ReleaseNote } from "./releaseNotes";
 
-const SEEN_VERSION_KEY = "lazy_release_notes_seen_version";
-
 export default function ReleaseNotesModal() {
     const [isOpen, setIsOpen] = useState(false);
     const [note, setNote] = useState<ReleaseNote | null>(null);
@@ -22,19 +20,33 @@ export default function ReleaseNotesModal() {
                 const currentVersion = await settings.getVersion();
                 if (!currentVersion || isCancelled) return;
 
-                const seenVersion = localStorage.getItem(SEEN_VERSION_KEY);
+                const [seenVersion, lastRunVersion, pendingReleaseNotesVersion] = await Promise.all([
+                    settings.get("releaseNotesSeenVersion"),
+                    settings.get("lastRunVersion"),
+                    settings.get("pendingReleaseNotesVersion"),
+                ]);
 
-                // First run on this machine: initialize without interrupting user flow.
-                if (!seenVersion) {
-                    localStorage.setItem(SEEN_VERSION_KEY, currentVersion);
+                const updatedFromPreviousRun = !!lastRunVersion && lastRunVersion !== currentVersion;
+                const pendingForThisVersion =
+                    !!pendingReleaseNotesVersion && pendingReleaseNotesVersion === currentVersion;
+
+                const shouldShow =
+                    (pendingForThisVersion || updatedFromPreviousRun) &&
+                    seenVersion !== currentVersion;
+
+                settings.set("lastRunVersion", currentVersion);
+
+                // First launch on a machine/profile should not show release notes.
+                if (!lastRunVersion && !pendingForThisVersion) {
+                    settings.set("releaseNotesSeenVersion", currentVersion);
                     return;
                 }
 
-                if (seenVersion === currentVersion) return;
-
-                if (!isCancelled) {
+                if (shouldShow && !isCancelled) {
                     setNote(getReleaseNote(currentVersion));
                     setIsOpen(true);
+                } else if (pendingForThisVersion && seenVersion === currentVersion) {
+                    settings.set("pendingReleaseNotesVersion", "");
                 }
             } catch (error) {
                 console.error("Release notes check failed", error);
@@ -48,8 +60,10 @@ export default function ReleaseNotesModal() {
     }, []);
 
     const handleClose = () => {
-        if (note?.version) {
-            localStorage.setItem(SEEN_VERSION_KEY, note.version);
+        const settings = window.electron?.settings;
+        if (note?.version && settings) {
+            settings.set("releaseNotesSeenVersion", note.version);
+            settings.set("pendingReleaseNotesVersion", "");
         }
         setIsOpen(false);
     };

@@ -8,6 +8,9 @@ interface Config {
     openaiApiKey?: string;
     selectedMic?: string;
     theme?: string;
+    releaseNotesSeenVersion?: string;
+    lastRunVersion?: string;
+    pendingReleaseNotesVersion?: string;
 }
 
 function readConfig(): Config {

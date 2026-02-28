@@ -12,7 +12,8 @@ type AudioContextCtor = typeof AudioContext;
 type ExtendedWindow = Window & { webkitAudioContext?: AudioContextCtor };
 const SILENCE_THRESHOLD = 6;
 const DEFAULT_MEETING_TITLE = "Untitled Meeting";
-const TRANSCRIBE_CHUNK_MS = 5 * 60 * 1000;
+const MAX_RECORDING_SECONDS = 90 * 60;
+const AUDIO_BITS_PER_SECOND = 24_000;
 
 export default function MeetingPage() {
     const router = useRouter();
@@ -77,9 +78,7 @@ export default function MeetingPage() {
     };
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const currentChunkPartsRef = useRef<Blob[]>([]);
-    const currentChunkDurationMsRef = useRef(0);
-    const finalizedChunksRef = useRef<Blob[]>([]);
+    const recordingPartsRef = useRef<Blob[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const outputEditorRef = useRef<HTMLDivElement | null>(null);
     const syncingOutputRef = useRef(false);
@@ -94,7 +93,17 @@ export default function MeetingPage() {
     useEffect(() => {
         if (isRecording) {
             timerRef.current = setInterval(() => {
-                setRecordingTime(prev => prev + 1);
+                setRecordingTime(prev => {
+                    const next = prev + 1;
+                    if (next >= MAX_RECORDING_SECONDS) {
+                        mediaRecorderRef.current?.stop();
+                        setIsRecording(false);
+                        setAlertMessage("Recording stopped at 90:00 to keep transcription reliable.");
+                        window.electron?.settings?.sendStatus('processing', 'Max length reached, processing...');
+                        return MAX_RECORDING_SECONDS;
+                    }
+                    return next;
+                });
             }, 1000);
         } else {
             if (timerRef.current) clearInterval(timerRef.current);
@@ -147,19 +156,13 @@ export default function MeetingPage() {
         analyserRef.current = null;
     };
 
-    const flushRecordingChunk = (force = false) => {
-        if (currentChunkPartsRef.current.length === 0) return;
-        if (!force && currentChunkDurationMsRef.current < TRANSCRIBE_CHUNK_MS) return;
-
-        const chunkBlob = new Blob(currentChunkPartsRef.current, { type: "audio/webm" });
-        finalizedChunksRef.current.push(chunkBlob);
-        currentChunkPartsRef.current = [];
-        currentChunkDurationMsRef.current = 0;
-    };
-
     const setTranscriptionErrorStatus = (message: string) => {
         if (message.includes('API Key not found')) {
             window.electron?.settings?.sendStatus('error', 'NO API KEY');
+            return;
+        }
+        if (message.includes('HTTP 413')) {
+            window.electron?.settings?.sendStatus('error', 'AUDIO TOO LARGE');
             return;
         }
         if (message.includes('Whisper API failed')) {
@@ -169,55 +172,65 @@ export default function MeetingPage() {
         window.electron?.settings?.sendStatus('error', 'AI FAILED');
     };
 
-    const transcribeFinalizedChunks = async () => {
-        if (!window.electron?.ai) return;
+    const isPayloadTooLargeError = (message: string) => message.includes('HTTP 413');
 
+    const transcribeBlob = async (blob: Blob): Promise<string> => {
+        if (!window.electron?.ai) {
+            throw new Error("AI service is unavailable");
+        }
+        const arrayBuffer = await blob.arrayBuffer();
+        const text = await window.electron.ai.transcribe(arrayBuffer);
+        if (!text || !text.trim()) {
+            throw new Error("Transcription returned empty result");
+        }
+        return text.trim();
+    };
+
+    const transcribePartsWithFallback = async (parts: Blob[]): Promise<string> => {
+        if (parts.length === 0) {
+            throw new Error("No audio data available");
+        }
+
+        try {
+            return await transcribeBlob(new Blob(parts, { type: "audio/webm" }));
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Transcription failed";
+            if (!isPayloadTooLargeError(message)) {
+                throw err instanceof Error ? err : new Error(message);
+            }
+
+            if (parts.length < 2) {
+                throw new Error("Audio too large to process in one pass. Please record a shorter session.");
+            }
+
+            const splitIndex = Math.floor(parts.length / 2);
+            const leftParts = parts.slice(0, splitIndex);
+            const rightParts = parts.slice(splitIndex);
+            window.electron?.settings?.sendStatus('processing', 'Audio too large, splitting and retrying...');
+
+            const leftText = await transcribePartsWithFallback(leftParts);
+            const rightText = await transcribePartsWithFallback(rightParts);
+
+            if (leftText && rightText) return `${leftText}\n${rightText}`;
+            return leftText || rightText;
+        }
+    };
+
+    const transcribeRecording = async (parts: Blob[]) => {
         setIsProcessing(true);
         window.electron?.settings?.sendStatus('processing', 'Transcribing...');
 
-        let mergedTranscript = "";
-        let failedChunks = 0;
-        let lastErrorMessage = "";
-
         try {
-            const totalChunks = finalizedChunksRef.current.length;
-            for (let i = 0; i < totalChunks; i++) {
-                const chunk = finalizedChunksRef.current[i];
-                try {
-                    const arrayBuffer = await chunk.arrayBuffer();
-                    const text = await window.electron.ai.transcribe(arrayBuffer);
-                    if (!text || !text.trim()) {
-                        throw new Error("Transcription returned empty result");
-                    }
-
-                    mergedTranscript = mergedTranscript
-                        ? `${mergedTranscript}\n${text.trim()}`
-                        : text.trim();
-                    setTranscript(mergedTranscript);
-                } catch (err: unknown) {
-                    failedChunks += 1;
-                    lastErrorMessage = err instanceof Error ? err.message : "Transcription failed";
-                    console.error(`Chunk ${i + 1}/${totalChunks} transcription failed`, err);
-                }
-            }
-
-            if (!mergedTranscript) {
-                const msg = lastErrorMessage || "Transcription failed";
-                setTranscript(`Error: ${msg}`);
-                setTranscriptionErrorStatus(msg);
-                return;
-            }
-
-            if (failedChunks > 0) {
-                const totalChunks = finalizedChunksRef.current.length;
-                setAlertMessage(`Partial transcript ready. ${failedChunks} of ${totalChunks} chunk(s) failed.`);
-                window.electron?.settings?.sendStatus('warning', 'Partial transcript ready');
-            } else {
-                window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
-            }
+            const text = await transcribePartsWithFallback(parts);
+            setTranscript(text);
+            window.electron?.settings?.sendStatus('ready', 'Transcript Ready');
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Transcription failed";
+            setTranscript(`Error: ${msg}`);
+            setTranscriptionErrorStatus(msg);
+            console.error("Transcription failed", err);
         } finally {
             setIsProcessing(false);
-            finalizedChunksRef.current = [];
         }
     };
 
@@ -233,7 +246,9 @@ export default function MeetingPage() {
                 const electron = window.electron;
                 const selectedMic = await electron?.settings?.get("selectedMic");
                 const constraints = {
-                    audio: selectedMic ? { deviceId: { exact: selectedMic } } : true
+                    audio: selectedMic
+                        ? { deviceId: { exact: selectedMic }, channelCount: 1 }
+                        : { channelCount: 1 }
                 };
 
                 const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -242,19 +257,21 @@ export default function MeetingPage() {
                 // Start VAD
                 startVAD(mediaStream);
 
-                const options = { mimeType: 'audio/webm' };
+                const preferredMimeType = 'audio/webm;codecs=opus';
+                const options: MediaRecorderOptions = {
+                    audioBitsPerSecond: AUDIO_BITS_PER_SECOND
+                };
+                if (MediaRecorder.isTypeSupported(preferredMimeType)) {
+                    options.mimeType = preferredMimeType;
+                }
                 const recorder = new MediaRecorder(mediaStream, options);
                 mediaRecorderRef.current = recorder;
-                currentChunkPartsRef.current = [];
-                currentChunkDurationMsRef.current = 0;
-                finalizedChunksRef.current = [];
+                recordingPartsRef.current = [];
                 setTranscript("");
 
                 recorder.ondataavailable = (e) => {
                     if (e.data.size === 0) return;
-                    currentChunkPartsRef.current.push(e.data);
-                    currentChunkDurationMsRef.current += 1000;
-                    flushRecordingChunk(false);
+                    recordingPartsRef.current.push(e.data);
                 };
 
                 recorder.onstop = async () => {
@@ -268,15 +285,23 @@ export default function MeetingPage() {
                         return;
                     }
 
-                    flushRecordingChunk(true);
-                    await transcribeFinalizedChunks();
+                    if (recordingPartsRef.current.length === 0) {
+                        window.electron?.settings?.sendStatus('warning', 'No audio captured');
+                        setStream(null);
+                        mediaStream.getTracks().forEach(t => t.stop());
+                        return;
+                    }
+
+                    const parts = recordingPartsRef.current.slice();
+                    recordingPartsRef.current = [];
+                    await transcribeRecording(parts);
 
                     // Stop all tracks
                     mediaStream.getTracks().forEach(t => t.stop());
                     setStream(null);
                 };
 
-                recorder.start(1000); // Collect 1s chunks
+                recorder.start(1000); // Keep memory bounded while still producing a single final file.
                 setIsRecording(true);
                 setRecordingTime(0);
             } catch (err) {

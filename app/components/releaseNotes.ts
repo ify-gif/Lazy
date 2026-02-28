@@ -7,6 +7,16 @@ export interface ReleaseNote {
 
 const RELEASE_NOTES: ReleaseNote[] = [
     {
+        version: "1.0.19",
+        heading: "Long meeting transcription recovery is now automatic",
+        why: "Some long recordings could fail on upload size. This update retries automatically so long sessions are recoverable.",
+        items: [
+            "Removed fragile per-chunk upload flow and restored single-pass transcription for normal sessions.",
+            "If upload size is too large, transcription now auto-splits the audio into smaller halves and retries automatically.",
+            "Results from split retries are merged back in order so you keep one full transcript."
+        ]
+    },
+    {
         version: "1.0.16",
         heading: "One-time update notes are now built in",
         why: "Users should know what changed after an update, without searching release pages manually.",
@@ -18,11 +28,11 @@ const RELEASE_NOTES: ReleaseNote[] = [
     },
     {
         version: "1.0.15",
-        heading: "Long meetings are now safer and more reliable",
-        why: "Some long sessions could fail at the end and return nothing. This update protects captured content and reduces full-session loss risk.",
+        heading: "Long meetings use a single reliable transcription flow",
+        why: "Chunk-level failures were causing partial or broken results. This update returns to a single-pass transcription path with recording limits tuned for long sessions.",
         items: [
-            "Meeting recordings are transcribed in chunks instead of one large upload.",
-            "If one chunk fails, successful chunks are still kept so transcript recovery is partial, not all-or-nothing.",
+            "Meeting recordings are transcribed as one continuous file instead of per-chunk uploads.",
+            "Recording now auto-stops at 90 minutes to keep end-to-end transcription within safe bounds.",
             "Transcription errors now include clearer API details to speed up troubleshooting."
         ]
     }

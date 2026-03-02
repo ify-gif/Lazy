@@ -768,29 +768,29 @@ export default function TrackerPage() {
                         <div className="relative px-3 py-2 flex items-center justify-between bg-muted/20 border-t border-border mt-auto">
                             <div className="flex items-center">
                                 <div className="flex items-center gap-1.5">
-                                <Button
-                                    variant={isRecording ? 'destructive' : 'primary'}
-                                    size="sm"
-                                    onClick={handleToggleRecording}
-                                    className={`h-7 py-0 text-[10px] ${isRecording ? 'animate-pulse' : ''}`}
-                                >
-                                    <Mic size={12} className="mr-1" />
-                                    {isRecording ? "Stop" : "Record"}
-                                </Button>
+                                    <Button
+                                        variant={isRecording ? 'destructive' : 'primary'}
+                                        size="sm"
+                                        onClick={handleToggleRecording}
+                                        className={`h-7 py-0 text-[10px] ${isRecording ? 'animate-pulse' : ''}`}
+                                    >
+                                        <Mic size={12} className="mr-1" />
+                                        {isRecording ? "Stop" : "Record"}
+                                    </Button>
 
-                                {isRecording && (
-                                    <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-background rounded border border-border shadow-inner h-7">
-                                        <span className="text-[10px] font-mono text-foreground font-medium w-8 text-center">{formatTime(recordingTime)}</span>
-                                        <Waveform stream={stream} className="w-16 h-4" />
-                                    </div>
-                                )}
+                                    {isRecording && (
+                                        <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-background rounded border border-border shadow-inner h-7">
+                                            <span className="text-[10px] font-mono text-foreground font-medium w-8 text-center">{formatTime(recordingTime)}</span>
+                                            <Waveform stream={stream} className="w-16 h-4" />
+                                        </div>
+                                    )}
 
-                                {isProcessing && (
-                                    <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-secondary/30 rounded h-7">
-                                        <div className="w-1 h-1 bg-primary rounded-full animate-bounce" />
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">AI Processing...</span>
-                                    </div>
-                                )}
+                                    {isProcessing && (
+                                        <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-secondary/30 rounded h-7">
+                                            <div className="w-1 h-1 bg-primary rounded-full animate-bounce" />
+                                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">AI Processing...</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button
@@ -911,7 +911,7 @@ export default function TrackerPage() {
                                     : "bg-background/80 border-border hover:bg-secondary/60"
                                     }`}
                             >
-                                    <div className="flex flex-col min-w-0 mr-1.5">
+                                <div className="flex flex-col min-w-0 mr-1.5">
                                     <div className="font-medium text-[11px] leading-snug text-foreground truncate" title={comment.output || "Untitled"}>
                                         {(comment.output || "").slice(0, 35)}...
                                     </div>

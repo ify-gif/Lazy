@@ -44,6 +44,8 @@ export default function TitleBar() {
             }
         };
 
+        if (!window.electron) return;
+
         void window.electron.settings.getApiKey().then((key) => {
             if (!key) {
                 setStatus('error');

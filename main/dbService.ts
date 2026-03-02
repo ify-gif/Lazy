@@ -1,7 +1,7 @@
 import sqlite3 from 'sqlite3';
 import { app } from 'electron';
 import path from 'path';
-import { Meeting, WorkStory } from './types';
+import { Meeting, WorkStory, Thread } from './types';
 
 const dbPath = path.join(app.getPath('userData'), 'lazy_history.db');
 
@@ -88,6 +88,30 @@ export const DBService = {
                     await this.addColumnIfMissing('work_stories', 'title', 'TEXT');
                 },
             },
+            {
+                id: '005_add_work_stories_source_meeting_id',
+                run: async () => {
+                    await this.addColumnIfMissing('work_stories', 'source_meeting_id', 'INTEGER');
+                },
+            },
+            {
+                id: '006_create_threads',
+                run: async () => {
+                    await this.run(`
+                        CREATE TABLE IF NOT EXISTS threads (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            name TEXT NOT NULL,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `);
+                },
+            },
+            {
+                id: '007_add_meeting_thread_id',
+                run: async () => {
+                    await this.addColumnIfMissing('meetings', 'thread_id', 'INTEGER');
+                },
+            },
         ];
 
         for (const migration of migrations) {
@@ -139,13 +163,13 @@ export const DBService = {
     },
 
     // Meetings
-    async saveMeeting(title: string, transcript: string, summary: string): Promise<number> {
+    async saveMeeting(title: string, transcript: string, summary: string, threadId?: number): Promise<number> {
         const db = this.db;
         if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
             db.run(
-                'INSERT INTO meetings (title, transcript, summary) VALUES (?, ?, ?)',
-                [title, transcript, summary],
+                'INSERT INTO meetings (title, transcript, summary, thread_id) VALUES (?, ?, ?, ?)',
+                [title, transcript, summary, threadId || null],
                 function (err) {
                     if (err) reject(err);
                     else resolve(this.lastID);
@@ -154,7 +178,7 @@ export const DBService = {
         });
     },
 
-    async getMeetings(limit = 50): Promise<Meeting[]> {
+    async getMeetings(limit = 100): Promise<Meeting[]> {
         const db = this.db;
         if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
@@ -169,14 +193,67 @@ export const DBService = {
         });
     },
 
-    // Work Stories
-    async saveWorkStory(type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string): Promise<number> {
+    async updateMeetingThread(meetingId: number, threadId: number | null): Promise<void> {
         const db = this.db;
         if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
             db.run(
-                'INSERT INTO work_stories (type, title, overview, output, parent_id) VALUES (?, ?, ?, ?, ?)',
-                [type, type === 'story' ? (title ?? null) : null, overview, output, parentId || null],
+                'UPDATE meetings SET thread_id = ? WHERE id = ?',
+                [threadId, meetingId],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    },
+
+    // Threads
+    async getThreads(): Promise<Thread[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.all('SELECT * FROM threads ORDER BY name ASC', (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows as Thread[]);
+            });
+        });
+    },
+
+    async saveThread(name: string): Promise<number> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run('INSERT INTO threads (name) VALUES (?)', [name], function (err) {
+                if (err) reject(err);
+                else resolve(this.lastID);
+            });
+        });
+    },
+
+    async getMeetingsByThread(threadId: number): Promise<Meeting[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.all(
+                'SELECT * FROM meetings WHERE thread_id = ? ORDER BY created_at ASC',
+                [threadId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows as Meeting[]);
+                }
+            );
+        });
+    },
+
+    // Work Stories
+    async saveWorkStory(type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string, sourceMeetingId?: number): Promise<number> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run(
+                'INSERT INTO work_stories (type, title, overview, output, parent_id, source_meeting_id) VALUES (?, ?, ?, ?, ?, ?)',
+                [type, type === 'story' ? (title ?? null) : null, overview, output, parentId || null, sourceMeetingId || null],
                 function (err) {
                     if (err) reject(err);
                     else resolve(this.lastID);

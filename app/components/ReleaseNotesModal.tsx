@@ -82,8 +82,21 @@ export default function ReleaseNotesModal() {
         };
 
         void hydrate();
+
+        const handleShowManual = () => {
+            const settings = window.electron?.settings;
+            if (settings) {
+                settings.getVersion().then(version => {
+                    setNote(getReleaseNote(version));
+                    setIsOpen(true);
+                });
+            }
+        };
+        window.addEventListener('show-release-notes', handleShowManual);
+
         return () => {
             isCancelled = true;
+            window.removeEventListener('show-release-notes', handleShowManual);
         };
     }, []);
 

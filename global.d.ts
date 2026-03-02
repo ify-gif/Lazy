@@ -1,5 +1,4 @@
-import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse } from './main/types';
-
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate } from './main/types';
 declare global {
     interface Window {
         electron: {
@@ -26,14 +25,20 @@ declare global {
             };
             ai: {
                 transcribe: (buffer: ArrayBuffer) => Promise<string>;
-                summarizeMeeting: (transcript: string) => Promise<string>;
+                summarizeMeeting: (transcript: string, template?: MeetingTemplate, previousSummary?: string) => Promise<string>;
                 generateStory: (overview: string) => Promise<AIResponse>;
                 polishComment: (comment: string) => Promise<string>;
+                extractActionItems: (summary: string) => Promise<ActionItem[]>;
+                generateStoryFromActionItem: (actionItem: string, meetingContext: string) => Promise<AIResponse>;
             };
             db: {
-                saveMeeting: (title: string, transcript: string, summary: string) => Promise<number>;
+                saveMeeting: (title: string, transcript: string, summary: string, threadId?: number) => Promise<number>;
+                updateMeetingThread: (meetingId: number, threadId: number | null) => Promise<void>;
                 getMeetings: () => Promise<Meeting[]>;
-                saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string) => Promise<number>;
+                getThreads: () => Promise<Thread[]>;
+                saveThread: (name: string) => Promise<number>;
+                getMeetingsByThread: (threadId: number) => Promise<Meeting[]>;
+                saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string, sourceMeetingId?: number) => Promise<number>;
                 getWorkStories: () => Promise<WorkStory[]>;
                 getComments: (storyId: number) => Promise<WorkStory[]>;
                 updateWorkStoryTitle: (id: number, title: string) => Promise<void>;

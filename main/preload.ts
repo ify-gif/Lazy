@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse } from './types';
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate } from './types';
 
 contextBridge.exposeInMainWorld('electron', {
     windowControls: {
@@ -33,15 +33,24 @@ contextBridge.exposeInMainWorld('electron', {
     },
     ai: {
         transcribe: (buffer: ArrayBuffer): Promise<string> => ipcRenderer.invoke('ai-transcribe', buffer),
-        summarizeMeeting: (transcript: string): Promise<string> => ipcRenderer.invoke('ai-summarize-meeting', transcript),
+        summarizeMeeting: (transcript: string, template?: MeetingTemplate, previousSummary?: string): Promise<string> =>
+            ipcRenderer.invoke('ai-summarize-meeting', { transcript, template, previousSummary }),
         generateStory: (overview: string): Promise<AIResponse> => ipcRenderer.invoke('ai-generate-story', overview),
         polishComment: (comment: string): Promise<string> => ipcRenderer.invoke('ai-polish-comment', comment),
+        extractActionItems: (summary: string): Promise<ActionItem[]> => ipcRenderer.invoke('ai-extract-action-items', summary),
+        generateStoryFromActionItem: (actionItem: string, meetingContext: string): Promise<AIResponse> =>
+            ipcRenderer.invoke('ai-generate-story-from-action-item', { actionItem, meetingContext }),
     },
     db: {
-        saveMeeting: (title: string, transcript: string, summary: string): Promise<number> => ipcRenderer.invoke('db-save-meeting', { title, transcript, summary }),
+        saveMeeting: (title: string, transcript: string, summary: string, threadId?: number): Promise<number> =>
+            ipcRenderer.invoke('db-save-meeting', title, transcript, summary, threadId),
+        updateMeetingThread: (meetingId: number, threadId: number | null): Promise<void> => ipcRenderer.invoke('db-update-meeting-thread', meetingId, threadId),
         getMeetings: (): Promise<Meeting[]> => ipcRenderer.invoke('db-get-meetings'),
-        saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string): Promise<number> =>
-            ipcRenderer.invoke('db-save-work-story', { type, title, overview, output, parentId }),
+        getThreads: (): Promise<Thread[]> => ipcRenderer.invoke('db-get-threads'),
+        saveThread: (name: string): Promise<number> => ipcRenderer.invoke('db-save-thread', name),
+        getMeetingsByThread: (threadId: number): Promise<Meeting[]> => ipcRenderer.invoke('db-get-meetings-by-thread', threadId),
+        saveWorkStory: (type: 'story' | 'comment', overview: string, output: string, parentId?: number, title?: string, sourceMeetingId?: number): Promise<number> =>
+            ipcRenderer.invoke('db-save-work-story', { type, title, overview, output, parentId, sourceMeetingId }),
         getWorkStories: (): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-work-stories'),
         getComments: (storyId: number): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-comments', storyId),
         updateWorkStoryTitle: (id: number, title: string): Promise<void> => ipcRenderer.invoke('db-update-work-story-title', { id, title }),

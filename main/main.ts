@@ -237,7 +237,7 @@ autoUpdater.on('update-downloaded', () => {
     broadcastUpdateEvent('update-downloaded');
 });
 
-import { StatusUpdate, UpdateEvent } from './types';
+import { StatusUpdate, UpdateEvent, MeetingTemplate } from './types';
 
 function broadcastStatus(status: StatusUpdate['status'], message: string) {
     BrowserWindow.getAllWindows().forEach(win => {
@@ -271,8 +271,11 @@ ipcMain.handle('ai-transcribe', async (_event, arrayBuffer: ArrayBuffer) => {
     return await AIService.transcribe(buffer);
 });
 
-ipcMain.handle('ai-summarize-meeting', async (_event, transcript: string) => {
-    return await AIService.summarizeMeeting(transcript);
+ipcMain.handle('ai-summarize-meeting', async (_event, payload: { transcript: string; template?: MeetingTemplate; previousSummary?: string } | string) => {
+    if (typeof payload === 'string') {
+        return await AIService.summarizeMeeting(payload);
+    }
+    return await AIService.summarizeMeeting(payload.transcript, payload.template, payload.previousSummary);
 });
 
 ipcMain.handle('ai-generate-story', async (_event, overview: string) => {
@@ -283,21 +286,45 @@ ipcMain.handle('ai-polish-comment', async (_event, comment: string) => {
     return await AIService.polishComment(comment);
 });
 
+ipcMain.handle('ai-extract-action-items', async (_event, summary: string) => {
+    return await AIService.extractActionItems(summary);
+});
+
+ipcMain.handle('ai-generate-story-from-action-item', async (_event, { actionItem, meetingContext }: { actionItem: string; meetingContext: string }) => {
+    return await AIService.generateStoryFromActionItem(actionItem, meetingContext);
+});
+
 ipcMain.handle('ai-validate-key', async (_event, apiKey: string) => {
     return await AIService.validateKey(apiKey);
 });
 
 // DB Handlers
-ipcMain.handle('db-save-meeting', async (_event, { title, transcript, summary }) => {
-    return await DBService.saveMeeting(title, transcript, summary);
+ipcMain.handle('db-save-meeting', async (_event, { title, transcript, summary, threadId }) => {
+    return await DBService.saveMeeting(title, transcript, summary, threadId);
+});
+
+ipcMain.handle('db-update-meeting-thread', async (_event, meetingId, threadId) => {
+    return await DBService.updateMeetingThread(meetingId, threadId);
+});
+
+ipcMain.handle('db-get-threads', async () => {
+    return await DBService.getThreads();
+});
+
+ipcMain.handle('db-save-thread', async (_event, name: string) => {
+    return await DBService.saveThread(name);
+});
+
+ipcMain.handle('db-get-meetings-by-thread', async (_event, threadId: number) => {
+    return await DBService.getMeetingsByThread(threadId);
 });
 
 ipcMain.handle('db-get-meetings', async () => {
     return await DBService.getMeetings();
 });
 
-ipcMain.handle('db-save-work-story', async (_event, { type, title, overview, output, parentId }) => {
-    return await DBService.saveWorkStory(type, overview, output, parentId, title);
+ipcMain.handle('db-save-work-story', async (_event, { type, title, overview, output, parentId, sourceMeetingId }) => {
+    return await DBService.saveWorkStory(type, overview, output, parentId, title, sourceMeetingId);
 });
 
 ipcMain.handle('db-get-work-stories', async () => {

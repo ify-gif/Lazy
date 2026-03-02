@@ -7,6 +7,18 @@ export interface ReleaseNote {
 
 const RELEASE_NOTES: ReleaseNote[] = [
     {
+        version: "1.2.0",
+        heading: "Meeting Threads, Dynamic Templates & Tracker Parity",
+        why: "Huge update! You can now organize your meetings into multi-session threads and format the AI summaries directly in the app. Plus, the Meeting UI has been upgraded to match the premium Tracker experience side-by-side.",
+        items: [
+            "📂 Threaded History: Group related meetings together. Click a thread folder to watch past sessions smoothly 'fall' into view.",
+            "📑 Meeting Templates: Choose between Standard, Stand-Up, Action Items, or Decision Log before hitting Generate. The AI will output exactly the structure you strictly need.",
+            "✨ UI Parity: The Meeting page now perfectly mirrors the Tracker aesthetic. Same premium header sizing, offsets, spacing, and button layouts.",
+            "🖱️ Context Menus: Right-click (or use the 3-dot menu) on any meeting in your history to change its thread, export it, or cleanly delete it.",
+            "📰 On-Demand Release Notes: Re-read these updates anytime! We added a new 'Release Notes' button directly into the System Settings."
+        ]
+    },
+    {
         version: "1.0.19",
         heading: "Long meeting transcription recovery is now automatic",
         why: "Some long recordings could fail on upload size. This update retries automatically so long sessions are recoverable.",

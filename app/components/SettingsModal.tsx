@@ -402,37 +402,51 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                 <span className="text-xs font-bold text-foreground truncate">{updateStatus}</span>
                                 <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Public Channel</span>
                             </div>
-                            {isUpdateAvailable || checkStatus === 'available' ? (
+                            <div className="flex items-center gap-2">
                                 <Button
-                                    variant="destructive"
+                                    variant="outline"
                                     size="sm"
-                                    onClick={isUpdateDownloaded ? () => window.electron.updates.install() : handleDownloadUpdate}
-                                    disabled={isDownloading}
-                                    className="px-4 py-1 animate-pulse"
+                                    onClick={() => {
+                                        window.dispatchEvent(new CustomEvent('show-release-notes'));
+                                        onClose();
+                                    }}
+                                    className="px-3"
                                 >
-                                    <RefreshCw size={12} className={`mr-1.5 ${isDownloading ? 'animate-spin' : ''}`} />
-                                    {isDownloading ? "Downloading..." : isUpdateDownloaded ? "Restart Now" : "Download"}
+                                    Release Notes
                                 </Button>
-                            ) : (
-                                <Button
-                                    variant={checkStatus === 'uptodate' ? 'success' : checkStatus === 'error' ? 'destructive' : 'outline'}
-                                    size="sm"
-                                    onClick={checkUpdates}
-                                    className="min-w-[120px]"
-                                    isLoading={checkStatus === 'checking'}
-                                >
-                                    {checkStatus === 'uptodate' ? "Up to date" :
-                                        checkStatus === 'error' ? "Try Again" : "Check Now"}
-                                </Button>
-                            )}
+                                {isUpdateAvailable || checkStatus === 'available' ? (
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={isUpdateDownloaded ? () => window.electron.updates.install() : handleDownloadUpdate}
+                                        disabled={isDownloading}
+                                        className="px-4 py-1 animate-pulse"
+                                    >
+                                        <RefreshCw size={12} className={`mr-1.5 ${isDownloading ? 'animate-spin' : ''}`} />
+                                        {isDownloading ? "Downloading..." : isUpdateDownloaded ? "Restart Now" : "Download"}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant={checkStatus === 'uptodate' ? 'success' : checkStatus === 'error' ? 'destructive' : 'outline'}
+                                        size="sm"
+                                        onClick={checkUpdates}
+                                        className="min-w-[120px]"
+                                        isLoading={checkStatus === 'checking'}
+                                    >
+                                        {checkStatus === 'uptodate' ? "Up to date" :
+                                            checkStatus === 'error' ? "Try Again" : "Check Now"}
+                                    </Button>
+                                )}
+                            </div>
                         </div>
+
                     </div>
 
                 </div>
 
                 {/* Footer */}
                 <div className="p-4 bg-muted/40 border-t border-border flex justify-end gap-3">
-                    <Button variant="ghost" onClick={onClose} className="px-6">Cancel</Button>
+                    <Button variant="outline" onClick={onClose} className="px-6">Cancel</Button>
                     <Button onClick={handleSave} className="px-8 shadow-md">Save Changes</Button>
                 </div>
 

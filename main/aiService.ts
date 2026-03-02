@@ -1,8 +1,9 @@
 import { Store } from './store';
-import { AIResponse } from './types';
+import { AIResponse, ActionItem, MeetingTemplate } from './types';
 import { aiLogger } from './logger';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1';
+
 interface ChatCompletionResponse {
     choices?: Array<{
         message?: {
@@ -11,38 +12,75 @@ interface ChatCompletionResponse {
     }>;
 }
 
-// Internal prompting system
 const PROMPTS = {
     whisper: "Technical Business Analyst meeting. Software requirements, Jira stories, API, GUI, Frontend, Backend, SQL, Acceptance Criteria.",
-    meetingSummary: (transcript: string) => `SYSTEM DIRECTIVE: LAZY APP - DIRECT EXECUTIVE MEETING NOTES
-You are the intelligence layer of the LAZY app. You are a highly efficient, invisible Business Analyst taking notes directly inside a live meeting.
 
-CRITICAL STRIKE RULES (DO NOT VIOLATE):
-ZERO META-COMMENTARY: NEVER use the words "transcript," "recording," "speaker," "audio," or "text." Do NOT write "The transcript reveals..." or "In this meeting...". Act as if you are documenting facts natively.
-NO CONSULTANT JARGON: NEVER use words like "Strategically," "Core opportunity," or "Multifunctional." Speak in plain, direct, sharp business English.
-NO DENSE PARAGRAPHS: You must use the exact Markdown formatting below. Do not output massive walls of text.
-RICH-TEXT MARKDOWN ONLY: Use markdown headers and bullet points exactly as specified.
+    summarizeMeeting: (transcript: string, template: MeetingTemplate = 'standard', previousSummary?: string) => {
+        const baseDirective = `SYSTEM DIRECTIVE: DIRECT EXECUTIVE MEETING SUMMARIZER
+You are a highly efficient, invisible technical assistant. Convert the transcript below into a clean, structured meeting summary.
 
-REQUIRED OUTPUT FORMAT:
-## TL;DR
-- A brutal, 1-sentence bottom-line of the entire meeting.
+${previousSummary ? `CONTEXT FROM PREVIOUS MEETING IN THIS THREAD:
+${previousSummary}
+---` : ''}
 
-## Summary
-- A direct, 1-2 sentence overview of the meeting's purpose and main topic.
+REQUIRED FORMAT (MARKDOWN RICH TEXT):`;
 
-## Key Discussion Points
-- Capture the core facts, features, technical details, and problems discussed.
-- Use clean, context-rich bullet points.
+        const templateRules = {
+            standard: `## Summary
+- A single, short, punchy sentence that acts as the Title.
+
+## Description
+- Clean, context-rich breakdown using concise bullet points.
+- Highlight technical decisions, key arguments, and specific outcomes.
+- BOLD key technical terms or system names.
 
 ## Action Items
-- Extract specific tasks, next steps, or assignments.
-- If none, write exactly: "- No specific action items assigned."
+- Extract specific next steps, assigned owners, and any mentioned deadlines.
+- If none, write: "- None".`,
 
-## Conclusion
-- A brief 1-sentence wrap-up.
+            standup: `## Summary
+- A single, short sentence summarizing the overall status.
 
-Transcript:
-${transcript}`,
+## Yesterday
+- Concise bullet points of what was accomplished.
+
+## Today
+- Concise bullet points of what is planned.
+
+## Blockers
+- Any impediments or issues preventing progress.
+- If none, write: "- None".`,
+
+            action_items: `## Summary
+- A single, short sentence summarizing the meeting's focus.
+
+## Action Items
+- Extract every specific task, next step, assigned owner, and deadline.
+- Present them as a prioritized bulleted list.
+- If none, write: "- None".`,
+
+            decision_log: `## Summary
+- A single, short sentence stating the primary decision made.
+
+## What Was Decided
+- A clear, bulleted list of the final decisions reached.
+
+## Why It Was Decided
+- The rationale or technical reasoning behind the decisions.
+
+## Alternatives Considered
+- What other options were discussed and why they were rejected.
+- If none, write: "- None".
+
+## Action Items / Next Steps
+- What needs to be done next to execute or follow up on this decision.
+- Extract any specific tasks, assigned owners, and deadlines.
+- If none, write: "- None".`
+        };
+
+        return `${baseDirective}\n${templateRules[template] || templateRules.standard}\n\nRaw Transcript:\n${transcript}`;
+    },
+
     workStory: (overview: string) => `SYSTEM DIRECTIVE: DIRECT EXECUTIVE WORK STORY
 You are a highly efficient, invisible technical assistant. Convert raw audio dictation into a clean, structured work record.
 
@@ -65,6 +103,7 @@ REQUIRED FORMAT (MARKDOWN RICH TEXT):
 
 Raw Input:
 ${overview}`,
+
     polishComment: (comment: string) => `SYSTEM DIRECTIVE: DIRECT EXECUTIVE COMMENT POLISHER
 Convert rough dictation into a clean, professional status update or ticket comment.
 
@@ -73,7 +112,48 @@ Keep it concise and balanced. NO META-COMMENTARY. NO HEADERS OR EMOJIS.
 BOLD key technical terms or system names.
 
 Raw dictation:
-${comment}`
+${comment}`,
+
+    extractActionItems: (summary: string) => `SYSTEM DIRECTIVE: ACTION ITEM EXTRACTOR
+Extract every action item, task, next step, or follow-up from the meeting summary below.
+
+RULES:
+- Return a JSON object with a single key "items" containing an array
+- Each item has: "text" (the task description, concise but complete) and optionally "assignee" (person or team name if mentioned)
+- If no action items exist, return { "items": [] }
+- Do NOT invent items. Only extract what is explicitly stated.
+- Do NOT include meta-commentary or explanations.
+
+Meeting Summary:
+${summary}`,
+
+    storyFromActionItem: (actionItem: string, meetingContext: string) => `SYSTEM DIRECTIVE: DIRECT EXECUTIVE WORK STORY
+You are a highly efficient, invisible technical assistant. Convert the action item below into a clean, structured work record. Use the meeting context to enrich the story with relevant backstory, technical details, and acceptance criteria.
+
+ABSOLUTE RULES:
+NO META-COMMENTARY. NO EMOJIS. NO AGILE TEMPLATES.
+Use the meeting context for background — do NOT repeat the entire meeting summary.
+
+REQUIRED FORMAT (MARKDOWN RICH TEXT):
+## Summary
+- A single, short, punchy sentence that acts as the Title.
+
+## Description
+- Clean, context-rich breakdown using concise bullet points.
+- Include relevant backstory from the meeting context.
+
+## Acceptance Criteria
+- Scout for conditions of success. Format as clear bullet points.
+
+## Action Items
+- Extract specific next steps or blockers.
+- If none beyond the main task, write exactly: "- None".
+
+Meeting Context:
+${meetingContext}
+
+Action Item:
+${actionItem}`
 };
 
 export const AIService = {
@@ -82,7 +162,8 @@ export const AIService = {
         if (!apiKey) throw new Error("OpenAI API Key not found");
 
         const formData = new FormData();
-        const blob = new Blob([audioBuffer], { type: 'audio/webm' });
+        // Fixed: Buffer isn't directly assignable to BlobPart in some TS versions
+        const blob = new Blob([new Uint8Array(audioBuffer)], { type: 'audio/webm' });
         formData.append('file', blob, 'audio.webm');
         formData.append('model', 'whisper-1');
         formData.append('language', 'en');
@@ -123,11 +204,9 @@ export const AIService = {
         return !hallucinations.some(h => text.includes(h));
     },
 
-    async summarizeMeeting(transcript: string): Promise<string> {
-        if (!this.isValidTranscript(transcript)) {
-            return "Insufficient or invalid content. Please record more audio.";
-        }
-        return this._callGPT(PROMPTS.meetingSummary(transcript));
+    async summarizeMeeting(transcript: string, template: MeetingTemplate = 'standard', previousSummary?: string): Promise<string> {
+        if (!this.isValidTranscript(transcript)) return "Transcript too short to summarize.";
+        return this._callGPT(PROMPTS.summarizeMeeting(transcript, template, previousSummary));
     },
 
     async generateStory(overview: string): Promise<AIResponse> {
@@ -146,6 +225,30 @@ export const AIService = {
     async polishComment(comment: string): Promise<string> {
         if (!this.isValidTranscript(comment)) return "Input too short to polish.";
         return this._callGPT(PROMPTS.polishComment(comment));
+    },
+
+    async extractActionItems(summary: string): Promise<ActionItem[]> {
+        if (!summary || summary.length < 15) return [];
+        const raw = await this._callGPT(PROMPTS.extractActionItems(summary), true);
+        try {
+            const parsed = JSON.parse(raw) as { items?: ActionItem[] };
+            return Array.isArray(parsed.items) ? parsed.items : [];
+        } catch {
+            aiLogger.error('Failed to parse action items JSON');
+            return [];
+        }
+    },
+
+    async generateStoryFromActionItem(actionItem: string, meetingContext: string): Promise<AIResponse> {
+        if (!actionItem || actionItem.length < 5) {
+            return {
+                summary: "Input too short",
+                description: "Action item text is too short to generate a story."
+            };
+        }
+        const response = await this._callGPT(PROMPTS.storyFromActionItem(actionItem, meetingContext));
+        const summary = this._extractSummaryFromMarkdown(response) || (actionItem.split(' ').slice(0, 10).join(' ') + "...");
+        return { summary, description: response };
     },
 
     async _callGPT(prompt: string, jsonMode = false): Promise<string> {

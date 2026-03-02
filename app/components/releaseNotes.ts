@@ -7,7 +7,7 @@ export interface ReleaseNote {
 
 const RELEASE_NOTES: ReleaseNote[] = [
     {
-        version: "1.2.0",
+        version: "1.2.1",
         heading: "Meeting Threads, Dynamic Templates & Tracker Parity",
         why: "Huge update! You can now organize your meetings into multi-session threads and format the AI summaries directly in the app. Plus, the Meeting UI has been upgraded to match the premium Tracker experience side-by-side.",
         items: [

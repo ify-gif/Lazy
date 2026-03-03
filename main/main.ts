@@ -319,6 +319,10 @@ ipcMain.handle('db-get-meetings-by-thread', async (_event, threadId: number) => 
     return await DBService.getMeetingsByThread(threadId);
 });
 
+ipcMain.handle('db-delete-thread', async (_event, threadId: number) => {
+    return await DBService.deleteThread(threadId);
+});
+
 ipcMain.handle('db-get-meetings', async () => {
     return await DBService.getMeetings();
 });

@@ -7,15 +7,15 @@ export interface ReleaseNote {
 
 const RELEASE_NOTES: ReleaseNote[] = [
     {
-        version: "1.2.1",
-        heading: "Meeting Threads, Dynamic Templates & Tracker Parity",
-        why: "Huge update! You can now organize your meetings into multi-session threads and format the AI summaries directly in the app. Plus, the Meeting UI has been upgraded to match the premium Tracker experience side-by-side.",
+        version: "1.2.2",
+        heading: "Safe Folder Deletion & UI Refinements",
+        why: "We've added powerful folder management and polished the interface for a smoother, more intuitive experience.",
         items: [
-            "📂 Threaded History: Group related meetings together. Click a thread folder to watch past sessions smoothly 'fall' into view.",
-            "📑 Meeting Templates: Choose between Standard, Stand-Up, Action Items, or Decision Log before hitting Generate. The AI will output exactly the structure you strictly need.",
-            "✨ UI Parity: The Meeting page now perfectly mirrors the Tracker aesthetic. Same premium header sizing, offsets, spacing, and button layouts.",
-            "🖱️ Context Menus: Right-click (or use the 3-dot menu) on any meeting in your history to change its thread, export it, or cleanly delete it.",
-            "📰 On-Demand Release Notes: Re-read these updates anytime! We added a new 'Release Notes' button directly into the System Settings."
+            "🗑️ Safe Folder Deletion: You can now delete entire thread folders. Don't worry—all meetings inside are safely 'un-grouped' and moved to Standalone, so no data is ever lost.",
+            "🎨 UI Polish: Refined the sidebar with compact spacing, clarified session labels ('CLEAR/NEW SESSION'), and introduced a permanent red Trash icon for folders.",
+            "📂 Fluid Threads: Related meetings now group into folders that 'fall' into view with a smooth fallback animation.",
+            "📑 Meeting Templates: Select between Standard, Stand-Up, Action Items, or Decision Log to get perfectly structured AI summaries.",
+            "✨ Unified Design: The Meeting and Tracker pages now share identical premium header sizing, offsets, and typography."
         ]
     },
     {

@@ -309,6 +309,38 @@ export const DBService = {
         });
     },
 
+    async deleteThread(threadId: number): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION');
+                // Un-group meetings first
+                db.run('UPDATE meetings SET thread_id = NULL WHERE thread_id = ?', [threadId], (updateErr) => {
+                    if (updateErr) {
+                        db.run('ROLLBACK');
+                        reject(updateErr);
+                        return;
+                    }
+
+                    // Delete the thread
+                    db.run('DELETE FROM threads WHERE id = ?', [threadId], (deleteErr) => {
+                        if (deleteErr) {
+                            db.run('ROLLBACK');
+                            reject(deleteErr);
+                            return;
+                        }
+
+                        db.run('COMMIT', (commitErr) => {
+                            if (commitErr) reject(commitErr);
+                            else resolve();
+                        });
+                    });
+                });
+            });
+        });
+    },
+
     async deleteItem(table: 'meetings' | 'work_stories', id: number): Promise<void> {
         const db = this.db;
         if (!db) throw new Error('Database not initialized');

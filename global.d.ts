@@ -42,6 +42,7 @@ declare global {
                 getWorkStories: () => Promise<WorkStory[]>;
                 getComments: (storyId: number) => Promise<WorkStory[]>;
                 updateWorkStoryTitle: (id: number, title: string) => Promise<void>;
+                deleteThread: (threadId: number) => Promise<void>;
                 deleteItem: (table: 'meetings' | 'work_stories', id: number) => Promise<void>;
             };
             platform: string;

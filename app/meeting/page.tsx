@@ -77,6 +77,7 @@ export default function MeetingPage() {
     // Modal State
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+    const [pendingDeleteThreadId, setPendingDeleteThreadId] = useState<number | null>(null);
 
     // Action Items state
     const [actionItems, setActionItems] = useState<ActionItemUI[]>([]);
@@ -211,6 +212,21 @@ export default function MeetingPage() {
             console.error("Delete failed", err);
         } finally {
             setPendingDeleteId(null);
+        }
+    };
+
+    const confirmDeleteThread = async () => {
+        if (pendingDeleteThreadId === null) return;
+        try {
+            await window.electron.db.deleteThread(pendingDeleteThreadId);
+            loadThreads();
+            loadHistory();
+            window.electron.settings.sendStatus('ready', 'Thread deleted');
+        } catch (err) {
+            console.error("Delete thread failed", err);
+            window.electron.settings.sendStatus('error', 'Failed to delete thread');
+        } finally {
+            setPendingDeleteThreadId(null);
         }
     };
 
@@ -790,7 +806,7 @@ export default function MeetingPage() {
                         className="h-7 text-[10px] font-bold italic uppercase tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 cursor-pointer hover:text-green-700 dark:hover:text-green-300 hover:opacity-90 transition-all focus-visible:outline-none ml-[25px]"
                         title="Clear Current Session"
                     >
-                        CLEAR SESSION
+                        CLEAR/NEW SESSION
                     </button>
 
                     <div className="flex-1" />
@@ -819,7 +835,7 @@ export default function MeetingPage() {
                                     SAVED MEETINGS
                                 </h3>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-1.5 space-y-2">
+                            <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
                                 {historyItems.length === 0 ? (
                                     <div className="text-center py-6 opacity-30 italic text-sm text-muted-foreground">No history</div>
                                 ) : (
@@ -831,10 +847,10 @@ export default function MeetingPage() {
                                             const isExpanded = expandedThreads.has(thread.id);
 
                                             return (
-                                                <div key={thread.id} className="space-y-1">
+                                                <div key={thread.id}>
                                                     <div
                                                         onClick={(e) => { e.stopPropagation(); toggleThread(thread.id); }}
-                                                        className="flex items-center gap-2 p-2 rounded-md hover:bg-secondary/40 cursor-pointer group transition-colors"
+                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-secondary/40 cursor-pointer group transition-colors relative"
                                                     >
                                                         <ChevronRight
                                                             size={14}
@@ -844,21 +860,35 @@ export default function MeetingPage() {
                                                         <span className={`text-[11px] font-bold uppercase tracking-wider truncate flex-1 transition-colors ${isExpanded ? 'text-foreground' : 'text-foreground/80'}`}>
                                                             {thread.name}
                                                         </span>
-                                                        <span className="text-[9px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded-full font-mono">
-                                                            {threadMeetings.length}
-                                                        </span>
+
+                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                            {/* Trash Trigger - Red and Always Visible */}
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={(e) => { e.stopPropagation(); setPendingDeleteThreadId(thread.id); }}
+                                                                className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                                                                title="Delete Thread"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </Button>
+
+                                                            {/* Meeting Count */}
+                                                            <span className="text-[9px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded-full font-mono">
+                                                                {threadMeetings.length}
+                                                            </span>
+                                                        </div>
                                                     </div>
 
                                                     <div
                                                         className="grid transition-all duration-300 ease-in-out"
                                                         style={{
                                                             gridTemplateRows: isExpanded ? '1fr' : '0fr',
-                                                            opacity: isExpanded ? 1 : 0,
-                                                            marginTop: isExpanded ? '4px' : '0px'
+                                                            opacity: isExpanded ? 1 : 0
                                                         }}
                                                     >
                                                         <div className="overflow-hidden">
-                                                            <div className="ml-4 pl-2 border-l border-border/50 space-y-1 py-1">
+                                                            <div className="ml-4 pl-2 border-l border-border/50 py-0.5">
                                                                 {threadMeetings.map(item => (
                                                                     <HistoryItem
                                                                         key={item.id}
@@ -879,7 +909,7 @@ export default function MeetingPage() {
 
                                         {/* Unthreaded Meetings */}
                                         {historyItems.filter(m => !m.thread_id).length > 0 && (
-                                            <div className="space-y-1 pt-2">
+                                            <div className="space-y-1 pt-1">
                                                 {threads.length > 0 && (
                                                     <div className="px-2 py-1">
                                                         <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">Standalone</span>
@@ -1323,6 +1353,25 @@ export default function MeetingPage() {
                     </div>
                 </div>
             )}
+            {/* Delete Thread Confirmation Modal */}
+            <Modal
+                isOpen={pendingDeleteThreadId !== null}
+                onClose={() => setPendingDeleteThreadId(null)}
+                title="Delete Thread"
+            >
+                <div className="space-y-4">
+                    <div className="text-sm text-muted-foreground leading-relaxed">
+                        Are you sure you want to delete <span className="text-foreground font-bold">"{threads.find(t => t.id === pendingDeleteThreadId)?.name}"</span>?
+                        <p className="mt-2 text-[11px] text-primary/70 bg-primary/5 p-2 rounded border border-primary/10 italic">
+                            All meetings within this folder will be un-grouped (moved to Standalone). No meetings will be deleted.
+                        </p>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                        <Button variant="ghost" onClick={() => setPendingDeleteThreadId(null)}>Cancel</Button>
+                        <Button variant="destructive" onClick={confirmDeleteThread}>Delete Folder</Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }

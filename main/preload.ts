@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('electron', {
         getWorkStories: (): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-work-stories'),
         getComments: (storyId: number): Promise<WorkStory[]> => ipcRenderer.invoke('db-get-comments', storyId),
         updateWorkStoryTitle: (id: number, title: string): Promise<void> => ipcRenderer.invoke('db-update-work-story-title', { id, title }),
+        deleteThread: (threadId: number): Promise<void> => ipcRenderer.invoke('db-delete-thread', threadId),
         deleteItem: (table: 'meetings' | 'work_stories', id: number): Promise<void> => ipcRenderer.invoke('db-delete-item', { table, id }),
     },
     platform: process.platform

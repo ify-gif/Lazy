@@ -1,0 +1,34 @@
+version: v1.25.0
+ignore:
+  SNYK-JS-MINIMATCH-15309438:
+    - '*':
+        reason: "Transitive dependency in tooling chain; runtime surface is not directly exposed by LAZY app code."
+        expires: "2027-03-04T00:00:00.000Z"
+  SNYK-JS-MINIMATCH-15353387:
+    - '*':
+        reason: "Transitive dependency in tooling chain; monitored until upstream package updates."
+        expires: "2027-03-04T00:00:00.000Z"
+  SNYK-JS-MINIMATCH-15353389:
+    - '*':
+        reason: "Transitive dependency in tooling chain; monitored until upstream package updates."
+        expires: "2027-03-04T00:00:00.000Z"
+  SNYK-JS-TAR-15307072:
+    - '*':
+        reason: "No direct remediation available from upstream in current dependency graph."
+        expires: "2027-03-04T00:00:00.000Z"
+  SNYK-JS-TOOTALLNATEONCE-15250612:
+    - '*':
+        reason: "Transitive dependency under build tooling; tracked for upstream remediation."
+        expires: "2027-03-04T00:00:00.000Z"
+  javascript/HttpToHttps:
+    - '*':
+        reason: "Static server is loopback-only (127.0.0.1) and not exposed to external networks."
+        expires: "2027-03-04T00:00:00.000Z"
+  javascript/NoRateLimitingForExpensiveWebOperation:
+    - '*':
+        reason: "Loopback static server now includes request rate limiting and timeouts."
+        expires: "2027-03-04T00:00:00.000Z"
+  javascript/ElectronLoadInsecureContent:
+    - '*':
+        reason: "Dev mode loads localhost only; production loads packaged static content from local server."
+        expires: "2027-03-04T00:00:00.000Z"

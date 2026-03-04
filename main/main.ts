@@ -9,6 +9,9 @@ import { logger } from './logger';
 
 let mainWindow: BrowserWindow | null;
 let staticServer: http.Server | null = null;
+const localRateWindowMs = 10_000;
+const localRateMaxRequests = 200;
+const requestCounters = new Map<string, { count: number; resetAt: number }>();
 
 const MIME_TYPES: Record<string, string> = {
     '.html': 'text/html; charset=utf-8',
@@ -65,6 +68,25 @@ async function startStaticServer(outDir: string): Promise<string> {
     }
 
     staticServer = http.createServer((req, res) => {
+        const clientIp = req.socket.remoteAddress || 'unknown';
+        const now = Date.now();
+        const bucket = requestCounters.get(clientIp);
+        if (!bucket || now > bucket.resetAt) {
+            requestCounters.set(clientIp, { count: 1, resetAt: now + localRateWindowMs });
+        } else if (bucket.count >= localRateMaxRequests) {
+            res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Too Many Requests');
+            return;
+        } else {
+            bucket.count += 1;
+        }
+
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+            res.writeHead(405, { Allow: 'GET, HEAD' });
+            res.end('Method Not Allowed');
+            return;
+        }
+
         const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
         const filePath = resolveStaticPath(outDir, urlPath);
 
@@ -90,9 +112,17 @@ async function startStaticServer(outDir: string): Promise<string> {
         const ext = path.extname(filePath).toLowerCase();
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
         const content = fs.readFileSync(filePath);
-        res.writeHead(200, { 'Content-Type': contentType });
+        res.writeHead(200, {
+            'Content-Type': contentType,
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "default-src 'self'; script-src 'self'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;"
+        });
         res.end(content);
     });
+
+    staticServer.maxHeadersCount = 100;
+    staticServer.requestTimeout = 15_000;
+    staticServer.keepAliveTimeout = 5_000;
 
     return await new Promise((resolve, reject) => {
         staticServer?.once('error', reject);

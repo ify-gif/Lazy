@@ -49,8 +49,6 @@ export default function TrackerPage() {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const outputEditorRef = useRef<HTMLDivElement | null>(null);
-    const syncingOutputRef = useRef(false);
 
     // VAD Refs
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -600,133 +598,6 @@ export default function TrackerPage() {
         }
     };
 
-    const escapeHtml = (input: string) =>
-        input
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
-
-    const inlineMarkdownToHtml = (line: string) => {
-        const escaped = escapeHtml(line);
-        return escaped
-            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-            .replace(/\*(.+?)\*/g, "<em>$1</em>");
-    };
-
-    const markdownToHtml = (markdown: string) => {
-        const lines = markdown.split(/\r?\n/);
-        const html: string[] = [];
-        let inList = false;
-        const sectionHeaderRegex = /^(tl;dr|summary|key discussion points|description|acceptance criteria|action items|conclusion)\s*:?\s*$/i;
-
-        for (const rawLine of lines) {
-            const line = rawLine.trim();
-            if (!line) {
-                if (inList) {
-                    html.push("</ul>");
-                    inList = false;
-                }
-                continue;
-            }
-
-            const headingMatch = line.match(/^#{1,6}\s*(.+)$/);
-            if (headingMatch) {
-                if (inList) {
-                    html.push("</ul>");
-                    inList = false;
-                }
-                const headingText = headingMatch[1].trim();
-                html.push(`<h2>${inlineMarkdownToHtml(headingText)}</h2>`);
-                continue;
-            }
-
-            const boldHeadingMatch = line.match(/^\*\*(.+?)\*\*:?\s*$/);
-            if (boldHeadingMatch) {
-                if (inList) {
-                    html.push("</ul>");
-                    inList = false;
-                }
-                html.push(`<h2>${inlineMarkdownToHtml(boldHeadingMatch[1].trim())}</h2>`);
-                continue;
-            }
-
-            if (sectionHeaderRegex.test(line)) {
-                if (inList) {
-                    html.push("</ul>");
-                    inList = false;
-                }
-                html.push(`<h2>${inlineMarkdownToHtml(line.replace(/:$/, "").trim())}</h2>`);
-                continue;
-            }
-
-            const bulletMatch = line.match(/^[-*•]\s+(.+)$/);
-            const orderedMatch = line.match(/^\d+\.\s+(.+)$/);
-            if (bulletMatch || orderedMatch) {
-                if (!inList) {
-                    html.push("<ul>");
-                    inList = true;
-                }
-                const itemText = (bulletMatch?.[1] || orderedMatch?.[1] || "").trim();
-                html.push(`<li>${inlineMarkdownToHtml(itemText)}</li>`);
-                continue;
-            }
-
-            if (inList) {
-                html.push("</ul>");
-                inList = false;
-            }
-            html.push(`<p>${inlineMarkdownToHtml(line)}</p>`);
-        }
-
-        if (inList) html.push("</ul>");
-        return html.join("");
-    };
-
-    const htmlToMarkdown = (html: string) => {
-        if (typeof window === "undefined") return "";
-        const container = document.createElement("div");
-        container.innerHTML = html;
-        const lines: string[] = [];
-
-        const pushBlock = (value: string) => {
-            const trimmed = value.trim();
-            if (trimmed) lines.push(trimmed);
-            lines.push("");
-        };
-
-        Array.from(container.children).forEach((el) => {
-            const tag = el.tagName.toLowerCase();
-            if (tag === "h2") {
-                pushBlock(`## ${el.textContent || ""}`);
-                return;
-            }
-            if (tag === "ul") {
-                Array.from(el.querySelectorAll("li")).forEach((li) => {
-                    lines.push(`- ${(li.textContent || "").trim()}`);
-                });
-                lines.push("");
-                return;
-            }
-            pushBlock(el.textContent || "");
-        });
-
-        return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-    };
-
-    useEffect(() => {
-        if (!outputEditorRef.current) return;
-        const html = markdownToHtml(summary);
-        if (outputEditorRef.current.innerHTML !== html) {
-            syncingOutputRef.current = true;
-            outputEditorRef.current.innerHTML = html;
-            queueMicrotask(() => {
-                syncingOutputRef.current = false;
-            });
-        }
-    }, [summary]);
-
     return (
         <div className="flex h-full flex-col bg-background text-foreground font-sans overflow-hidden">
             {/* --- TOP BRAND BAR --- */}
@@ -955,15 +826,10 @@ export default function TrackerPage() {
                         <div className="flex-1 p-2 overflow-y-auto bg-background/50 text-xs">
                             {summary ? (
                                 <div className="rounded-md border border-border bg-background p-2">
-                                    <div
-                                        ref={outputEditorRef}
-                                        contentEditable
-                                        suppressContentEditableWarning
-                                        onInput={(e) => {
-                                            if (syncingOutputRef.current) return;
-                                            setSummary(htmlToMarkdown((e.currentTarget as HTMLDivElement).innerHTML));
-                                        }}
-                                        className="prose prose-sm dark:prose-invert max-w-none min-h-[220px] focus:outline-none [&_h2]:text-base [&_h2]:font-bold [&_h2]:mt-3 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:my-1"
+                                    <textarea
+                                        value={summary}
+                                        onChange={(e) => setSummary(e.target.value)}
+                                        className="min-h-[220px] w-full resize-y rounded-md border border-border bg-background px-2 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                                     />
                                 </div>
                             ) : (
@@ -1177,3 +1043,5 @@ export default function TrackerPage() {
         </div>
     );
 }
+
+

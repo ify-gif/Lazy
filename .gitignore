@@ -54,3 +54,6 @@ nul
 # database
 *.db
 *.db-journal
+
+# local agent workspaces
+.claude/

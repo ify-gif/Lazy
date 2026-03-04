@@ -39,6 +39,8 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [teamDiagnostics, setTeamDiagnostics] = useState<TeamDiagnostics | null>(null);
     const [pairStatusTone, setPairStatusTone] = useState<'neutral' | 'success' | 'error'>('neutral');
     const [isLanInfoOpen, setIsLanInfoOpen] = useState(false);
+    const [manualPeerIp, setManualPeerIp] = useState("");
+    const [isManualConnectRunning, setIsManualConnectRunning] = useState(false);
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -284,6 +286,27 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             console.error("Failed to pair discovered peer", err);
             setPairStatus(`Failed to pair ${peer.deviceName}.`);
             setPairStatusTone('error');
+        }
+    };
+
+    const handleManualPeerConnect = async () => {
+        const ip = manualPeerIp.trim();
+        if (!ip || !window.electron?.team) return;
+        try {
+            setIsManualConnectRunning(true);
+            setPairStatus("Connecting to device...");
+            setPairStatusTone('neutral');
+            const peer = await window.electron.team.probePeer(ip);
+            setPairStatus(`Connected to ${peer.deviceName}. Click Pair to save it.`);
+            setPairStatusTone('success');
+            await loadDiscoveredPeers();
+            await loadDiagnostics();
+        } catch (err) {
+            console.error("Manual peer connect failed", err);
+            setPairStatus("Could not connect to that IP.");
+            setPairStatusTone('error');
+        } finally {
+            setIsManualConnectRunning(false);
         }
     };
 
@@ -676,6 +699,22 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         </div>
                                     ))}
                                 </div>
+                                <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                                    <Input
+                                        placeholder="Direct connect by IP (e.g. 192.168.1.24)"
+                                        value={manualPeerIp}
+                                        onChange={(e) => setManualPeerIp(e.target.value)}
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-10 px-3 text-muted-foreground"
+                                        onClick={() => void handleManualPeerConnect()}
+                                        disabled={!manualPeerIp.trim() || isManualConnectRunning}
+                                    >
+                                        {isManualConnectRunning ? "Connecting..." : "Connect"}
+                                    </Button>
+                                </div>
                                 {pairStatus && (
                                     <p className={`mt-1 text-[10px] ${pairStatusTone === 'success'
                                         ? 'text-green-600 dark:text-green-400'
@@ -710,6 +749,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         <span>UDP port:</span><span>{teamDiagnostics.discoveryPort}</span>
                                         <span>UDP error:</span><span className={teamDiagnostics.discoveryError ? "text-red-600 dark:text-red-400" : ""}>{teamDiagnostics.discoveryError || "-"}</span>
                                         <span>Broadcast paths:</span><span>{teamDiagnostics.broadcastTargets?.length ?? 0}</span>
+                                        <span>Local IPs:</span><span>{teamDiagnostics.localAddresses?.join(", ") || "-"}</span>
                                         <span>TCP listening:</span><span>{teamDiagnostics.tcpListening ? "yes" : "no"}</span>
                                         <span>TCP port:</span><span>{teamDiagnostics.tcpPort || "-"}</span>
                                         <span>Peers seen:</span><span>{teamDiagnostics.peerCount}</span>

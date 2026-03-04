@@ -99,6 +99,7 @@ export interface TeamDiagnostics {
     broadcastTargets?: string[];
     tcpListening: boolean;
     tcpPort: number;
+    localAddresses?: string[];
     lastBroadcastAt?: number;
     peerCount: number;
     profileReady: boolean;

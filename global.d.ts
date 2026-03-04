@@ -55,6 +55,7 @@ declare global {
                 getPeers: () => Promise<LanPeer[]>;
                 scanPeers: () => Promise<LanPeer[]>;
                 getDiagnostics: () => Promise<TeamDiagnostics>;
+                probePeer: (address: string) => Promise<LanPeer>;
                 sendShare: (peerDeviceId: string, packet: TeamSharePacket) => Promise<void>;
                 onEvent: (callback: (event: TeamShareEvent) => void) => () => void;
             };

@@ -417,6 +417,10 @@ ipcMain.handle('team-get-diagnostics', () => {
     return TeamShareService.getDiagnostics();
 });
 
+ipcMain.handle('team-probe-peer', async (_event, address: string) => {
+    return await TeamShareService.probePeer(address);
+});
+
 ipcMain.handle('team-send-share', async (_event, { peerDeviceId, packet }) => {
     return await TeamShareService.sendShare(peerDeviceId, packet);
 });

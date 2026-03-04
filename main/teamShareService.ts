@@ -8,6 +8,7 @@ import { DBService } from './dbService';
 import { LanPeer, LocalTeamProfile, TeamDiagnostics, TeamShareEvent, TeamSharePacket } from './types';
 
 const DISCOVERY_PORT = 41234;
+const TEAM_TCP_PORT = 41235;
 const BROADCAST_HOST = '255.255.255.255';
 const PEER_TTL_MS = 15_000;
 const DISCOVERY_INTERVAL_MS = 3_000;
@@ -32,6 +33,21 @@ interface ShareEnvelope {
         fingerprint: string;
     };
     packet: TeamSharePacket;
+}
+
+interface ProbeRequest {
+    type: 'lazy-probe';
+    version: 1;
+}
+
+interface ProbeResponse {
+    type: 'lazy-probe-ack';
+    version: 1;
+    deviceId: string;
+    deviceName: string;
+    pairingCode: string;
+    fingerprint: string;
+    port: number;
 }
 
 type MutablePeer = LanPeer & { remoteAddress: string };
@@ -128,6 +144,77 @@ export const TeamShareService = {
         });
     },
 
+    async probePeer(address: string): Promise<LanPeer> {
+        const cleanAddress = address.trim();
+        if (!cleanAddress) {
+            throw new Error('IP address is required');
+        }
+        const profile = this.getLocalProfile();
+        return await new Promise<LanPeer>((resolve, reject) => {
+            let resolved = false;
+            const socket = net.createConnection({ host: cleanAddress, port: TEAM_TCP_PORT }, () => {
+                const probe: ProbeRequest = { type: 'lazy-probe', version: 1 };
+                socket.write(`${JSON.stringify(probe)}\n`);
+            });
+
+            let buffer = '';
+            socket.setTimeout(3_500);
+            socket.on('data', (chunk) => {
+                buffer += chunk.toString('utf8');
+                if (!buffer.includes('\n')) return;
+                const line = buffer.slice(0, buffer.indexOf('\n')).trim();
+                if (!line) return;
+                try {
+                    const ack = JSON.parse(line) as ProbeResponse;
+                    if (ack.type !== 'lazy-probe-ack' || ack.version !== 1) {
+                        throw new Error('Invalid probe response');
+                    }
+                    if (ack.deviceId === profile.deviceId) {
+                        throw new Error('Cannot connect to same device');
+                    }
+                    const peer: MutablePeer = {
+                        deviceId: ack.deviceId,
+                        deviceName: ack.deviceName,
+                        pairingCode: ack.pairingCode,
+                        fingerprint: ack.fingerprint,
+                        address: cleanAddress,
+                        remoteAddress: cleanAddress,
+                        port: ack.port || TEAM_TCP_PORT,
+                        lastSeenAt: Date.now(),
+                    };
+                    this.peers.set(peer.deviceId, peer);
+                    this.emitEvent({ event: 'peers-updated', data: this.getPeers() });
+                    resolved = true;
+                    socket.end();
+                    resolve({
+                        deviceId: peer.deviceId,
+                        deviceName: peer.deviceName,
+                        pairingCode: peer.pairingCode,
+                        fingerprint: peer.fingerprint,
+                        address: peer.address,
+                        port: peer.port,
+                        lastSeenAt: peer.lastSeenAt,
+                    });
+                } catch (err) {
+                    socket.destroy();
+                    reject(err);
+                }
+            });
+            socket.on('timeout', () => {
+                socket.destroy();
+                if (!resolved) reject(new Error('Peer probe timed out'));
+            });
+            socket.on('error', (err) => {
+                if (!resolved) reject(err);
+            });
+            socket.on('close', () => {
+                if (!resolved && buffer.length === 0) {
+                    reject(new Error('No probe response received'));
+                }
+            });
+        });
+    },
+
     async scanPeers(): Promise<LanPeer[]> {
         if (!this.discoveryBound) {
             this.startDiscoverySocket();
@@ -149,6 +236,7 @@ export const TeamShareService = {
             broadcastTargets: this.lastBroadcastTargets.length > 0 ? this.lastBroadcastTargets : undefined,
             tcpListening: this.listeningPort > 0,
             tcpPort: this.listeningPort,
+            localAddresses: this.getLocalAddresses(),
             lastBroadcastAt: this.lastBroadcastAt || undefined,
             peerCount: this.peers.size,
             profileReady: !!this.profile,
@@ -203,15 +291,15 @@ export const TeamShareService = {
                 if (!buffer.includes('\n')) return;
                 const raw = buffer.slice(0, buffer.indexOf('\n')).trim();
                 buffer = '';
-                void this.handleIncomingShare(raw).catch((err) => {
+                void this.handleIncomingPayload(raw, socket).catch((err) => {
                     this.emitEvent({ event: 'share-error', data: { message: err instanceof Error ? err.message : 'Share import failed' } });
                 });
             });
         });
 
         await new Promise<void>((resolve, reject) => {
-            this.tcpServer?.once('error', reject);
-            this.tcpServer?.listen(0, '0.0.0.0', () => {
+            this.tcpServer?.once('error', (err) => reject(err));
+            this.tcpServer?.listen(TEAM_TCP_PORT, '0.0.0.0', () => {
                 const address = this.tcpServer?.address();
                 if (!address || typeof address === 'string') {
                     reject(new Error('Failed to start team share server'));
@@ -221,6 +309,27 @@ export const TeamShareService = {
                 resolve();
             });
         });
+    },
+
+    async handleIncomingPayload(raw: string, socket: net.Socket): Promise<void> {
+        const parsed = JSON.parse(raw) as Partial<ShareEnvelope | ProbeRequest>;
+        if (parsed.type === 'lazy-probe') {
+            const profile = this.getLocalProfile();
+            const ack: ProbeResponse = {
+                type: 'lazy-probe-ack',
+                version: 1,
+                deviceId: profile.deviceId,
+                deviceName: profile.deviceName,
+                pairingCode: profile.pairingCode,
+                fingerprint: profile.fingerprint,
+                port: this.listeningPort || TEAM_TCP_PORT,
+            };
+            socket.write(`${JSON.stringify(ack)}\n`);
+            socket.end();
+            return;
+        }
+
+        await this.handleIncomingShare(raw);
     },
 
     startDiscoverySocket(): void {
@@ -297,6 +406,20 @@ export const TeamShareService = {
             out.push((ipOctets[i] & maskOctets[i]) | (~maskOctets[i] & 255));
         }
         return out.join('.');
+    },
+
+    getLocalAddresses(): string[] {
+        const ips = new Set<string>();
+        const interfaces = os.networkInterfaces();
+        for (const infos of Object.values(interfaces)) {
+            if (!infos) continue;
+            for (const info of infos) {
+                if (info.family === 'IPv4' && !info.internal) {
+                    ips.add(info.address);
+                }
+            }
+        }
+        return Array.from(ips);
     },
 
     handleDiscoveryMessage(msg: Buffer, remoteAddress: string): void {

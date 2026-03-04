@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('electron', {
         getPeers: (): Promise<LanPeer[]> => ipcRenderer.invoke('team-get-peers'),
         scanPeers: (): Promise<LanPeer[]> => ipcRenderer.invoke('team-scan-peers'),
         getDiagnostics: (): Promise<TeamDiagnostics> => ipcRenderer.invoke('team-get-diagnostics'),
+        probePeer: (address: string): Promise<LanPeer> => ipcRenderer.invoke('team-probe-peer', address),
         sendShare: (peerDeviceId: string, packet: TeamSharePacket): Promise<void> =>
             ipcRenderer.invoke('team-send-share', { peerDeviceId, packet }),
         onEvent: (callback: (event: TeamShareEvent) => void) => {

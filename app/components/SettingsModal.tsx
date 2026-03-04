@@ -206,8 +206,17 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
         try {
             setIsScanningPeers(true);
             setPairStatus("Scanning LAN devices...");
-            const peers = await window.electron.team.scanPeers();
+            const teamApi = window.electron.team as typeof window.electron.team & {
+                scanPeers?: () => Promise<LanPeer[]>;
+            };
+            const peers = teamApi.scanPeers
+                ? await teamApi.scanPeers()
+                : await window.electron.team.getPeers();
             setDiscoveredPeers(peers);
+            if (!teamApi.scanPeers) {
+                setPairStatus("Scan API unavailable in this running build. Restart/update app, then scan again.");
+                return;
+            }
             setPairStatus(peers.length > 0 ? `Found ${peers.length} device(s).` : "No peers discovered yet.");
         } catch (err) {
             console.error("Failed to scan peers", err);

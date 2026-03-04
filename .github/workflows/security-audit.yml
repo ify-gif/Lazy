@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [ main, master ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   audit_and_build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       
@@ -22,7 +27,9 @@ jobs:
         run: npm ci
         
       - name: Security Audit
+        timeout-minutes: 8
         run: npm audit --omit=dev --audit-level=critical
         
       - name: Next.js Build
+        timeout-minutes: 10
         run: npm run build

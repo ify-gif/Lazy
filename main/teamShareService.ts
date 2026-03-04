@@ -47,6 +47,7 @@ export const TeamShareService = {
     started: false,
     discoveryBound: false,
     lastBroadcastAt: 0,
+    discoveryError: '',
 
     async start(): Promise<void> {
         if (this.started) return;
@@ -71,6 +72,7 @@ export const TeamShareService = {
         this.tcpServer = null;
         this.discoveryBound = false;
         this.lastBroadcastAt = 0;
+        this.discoveryError = '';
         this.peers.clear();
         this.started = false;
     },
@@ -125,6 +127,10 @@ export const TeamShareService = {
     },
 
     async scanPeers(): Promise<LanPeer[]> {
+        if (!this.discoveryBound) {
+            this.startDiscoverySocket();
+            await this.delay(500);
+        }
         this.broadcastPresence();
         await this.delay(900);
         this.broadcastPresence();
@@ -137,6 +143,7 @@ export const TeamShareService = {
         return {
             discoveryBound: this.discoveryBound,
             discoveryPort: DISCOVERY_PORT,
+            discoveryError: this.discoveryError || undefined,
             tcpListening: this.listeningPort > 0,
             tcpPort: this.listeningPort,
             lastBroadcastAt: this.lastBroadcastAt || undefined,
@@ -214,9 +221,18 @@ export const TeamShareService = {
     },
 
     startDiscoverySocket(): void {
-        this.discoverySocket = dgram.createSocket('udp4');
-        this.discoverySocket.on('error', () => {
-            // Keep app running even if discovery fails.
+        if (this.discoverySocket) {
+            try {
+                this.discoverySocket.close();
+            } catch {
+                // noop
+            }
+        }
+        this.discoverySocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+        this.discoverySocket.on('error', (err) => {
+            this.discoveryBound = false;
+            this.discoveryError = err.message || 'UDP bind failed';
+            this.emitEvent({ event: 'share-error', data: { message: this.discoveryError } });
         });
         this.discoverySocket.on('message', (msg, rinfo) => {
             this.handleDiscoveryMessage(msg, rinfo.address);
@@ -224,6 +240,7 @@ export const TeamShareService = {
         this.discoverySocket.bind(DISCOVERY_PORT, '0.0.0.0', () => {
             this.discoverySocket?.setBroadcast(true);
             this.discoveryBound = true;
+            this.discoveryError = '';
         });
     },
 

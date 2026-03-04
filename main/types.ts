@@ -95,6 +95,7 @@ export interface TeamShareEvent {
 export interface TeamDiagnostics {
     discoveryBound: boolean;
     discoveryPort: number;
+    discoveryError?: string;
     tcpListening: boolean;
     tcpPort: number;
     lastBroadcastAt?: number;

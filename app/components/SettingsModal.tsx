@@ -37,6 +37,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [pairStatus, setPairStatus] = useState("");
     const [isScanningPeers, setIsScanningPeers] = useState(false);
     const [teamDiagnostics, setTeamDiagnostics] = useState<TeamDiagnostics | null>(null);
+    const [pairStatusTone, setPairStatusTone] = useState<'neutral' | 'success' | 'error'>('neutral');
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -206,7 +207,14 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const loadDiagnostics = async () => {
         if (!window.electron?.team) return;
         try {
-            const diagnostics = await window.electron.team.getDiagnostics();
+            const teamApi = window.electron.team as typeof window.electron.team & {
+                getDiagnostics?: () => Promise<TeamDiagnostics>;
+            };
+            if (!teamApi.getDiagnostics) {
+                setTeamDiagnostics(null);
+                return;
+            }
+            const diagnostics = await teamApi.getDiagnostics();
             setTeamDiagnostics(diagnostics);
         } catch (err) {
             console.error("Failed to load team diagnostics", err);
@@ -218,6 +226,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
         try {
             setIsScanningPeers(true);
             setPairStatus("Scanning LAN devices...");
+            setPairStatusTone('neutral');
             const teamApi = window.electron.team as typeof window.electron.team & {
                 scanPeers?: () => Promise<LanPeer[]>;
             };
@@ -227,14 +236,17 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             setDiscoveredPeers(peers);
             if (!teamApi.scanPeers) {
                 setPairStatus("Scan API unavailable in this running build. Restart/update app, then scan again.");
+                setPairStatusTone('error');
                 await loadDiagnostics();
                 return;
             }
             setPairStatus(peers.length > 0 ? `Found ${peers.length} device(s).` : "No peers discovered yet.");
+            setPairStatusTone(peers.length > 0 ? 'success' : 'neutral');
             await loadDiagnostics();
         } catch (err) {
             console.error("Failed to scan peers", err);
             setPairStatus("Scan failed.");
+            setPairStatusTone('error');
         } finally {
             setIsScanningPeers(false);
         }
@@ -258,6 +270,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
         if (!window.electron?.db) return;
         if (teamDevices.some((device) => device.pairing_code === peer.pairingCode)) {
             setPairStatus(`${peer.deviceName} is already in My Team.`);
+            setPairStatusTone('neutral');
             return;
         }
 
@@ -265,9 +278,11 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             await window.electron.db.saveTeamDevice(peer.deviceName, peer.pairingCode);
             await loadTeamDevices();
             setPairStatus(`Paired ${peer.deviceName}.`);
+            setPairStatusTone('success');
         } catch (err) {
             console.error("Failed to pair discovered peer", err);
             setPairStatus(`Failed to pair ${peer.deviceName}.`);
+            setPairStatusTone('error');
         }
     };
 
@@ -422,7 +437,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-[500px] bg-card border border-border rounded-lg shadow-xl animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden">
+            <div className="w-[620px] max-w-[94vw] bg-card border border-border rounded-lg shadow-xl animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden">
 
                 {/* Header - Centered */}
                 <div className="relative flex items-center justify-center px-6 py-4 border-b border-border bg-muted/30">
@@ -611,7 +626,14 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                             value={localDeviceNameEdit}
                                             onChange={(e) => setLocalDeviceNameEdit(e.target.value)}
                                         />
-                                        <Button variant="outline" size="sm" onClick={saveLocalDeviceName}>Save</Button>
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            onClick={saveLocalDeviceName}
+                                            className="h-10 min-w-[88px] font-semibold"
+                                        >
+                                            Save
+                                        </Button>
                                     </div>
                                     <p className="mt-1 text-[10px] font-mono text-muted-foreground">
                                         Code {localProfile.pairingCode} | {localProfile.fingerprint}
@@ -653,7 +675,12 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                     ))}
                                 </div>
                                 {pairStatus && (
-                                    <p className="mt-1 text-[10px] text-muted-foreground">{pairStatus}</p>
+                                    <p className={`mt-1 text-[10px] ${pairStatusTone === 'success'
+                                        ? 'text-green-600 dark:text-green-400'
+                                        : pairStatusTone === 'error'
+                                            ? 'text-red-600 dark:text-red-400'
+                                            : 'text-muted-foreground'
+                                        }`}>{pairStatus}</p>
                                 )}
                             </div>
 
@@ -670,6 +697,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                     <div className="mt-2 grid grid-cols-2 gap-1 text-[10px] font-mono text-muted-foreground">
                                         <span>UDP bound:</span><span>{teamDiagnostics.discoveryBound ? "yes" : "no"}</span>
                                         <span>UDP port:</span><span>{teamDiagnostics.discoveryPort}</span>
+                                        <span>UDP error:</span><span className={teamDiagnostics.discoveryError ? "text-red-600 dark:text-red-400" : ""}>{teamDiagnostics.discoveryError || "-"}</span>
                                         <span>TCP listening:</span><span>{teamDiagnostics.tcpListening ? "yes" : "no"}</span>
                                         <span>TCP port:</span><span>{teamDiagnostics.tcpPort || "-"}</span>
                                         <span>Peers seen:</span><span>{teamDiagnostics.peerCount}</span>
@@ -702,6 +730,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                 </Button>
                             </div>
                             <Button
+                                variant="primary"
                                 onClick={handleAddTeamDevice}
                                 disabled={!newDeviceName.trim() || newPairingCode.length !== 6}
                                 className="w-full"
@@ -753,7 +782,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                 {/* Footer */}
                 <div className="p-4 bg-muted/40 border-t border-border flex justify-end gap-3">
                     <Button variant="outline" onClick={onClose} className="px-6">Cancel</Button>
-                    <Button onClick={handleSave} className="px-8 shadow-md">Save Changes</Button>
+                    <Button variant="secondary" onClick={handleSave} className="px-8">Save Changes</Button>
                 </div>
 
             </div>

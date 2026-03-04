@@ -3,13 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-    Mic, Plus, Trash2, Copy, Download, Search, Pencil, Check, X, Share2, MoreVertical
+    Mic, Plus, Trash2, Copy, Download, Search, Pencil, Check, X, Share2, MoreVertical, Upload
 } from "lucide-react";
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
 import type { WorkStory, AIResponse, LanPeer, TeamSharePacket, TeamShareEvent } from "../../main/types";
-import { downloadLazyShareFile } from "../lib/lazyshare";
+import { downloadLazyShareFile, parseLazyShareFile } from "../lib/lazyshare";
 
 type AudioContextCtor = typeof AudioContext;
 type ExtendedWindow = Window & { webkitAudioContext?: AudioContextCtor };
@@ -410,6 +410,35 @@ export default function TrackerPage() {
         );
     };
 
+    const handleReceiveFromTeammate = async () => {
+        if (!window.electron?.db) return;
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.lazyshare,application/json';
+        input.onchange = async (event) => {
+            const target = event.target as HTMLInputElement;
+            const selected = target.files?.[0];
+            if (!selected) return;
+            try {
+                const envelope = await parseLazyShareFile(selected);
+                if (envelope.kind !== 'story') {
+                    setAlertMessage("This file is not a story share.");
+                    return;
+                }
+                const titleValue = typeof envelope.payload.title === 'string' ? envelope.payload.title : "Shared Story";
+                const overviewValue = typeof envelope.payload.overview === 'string' ? envelope.payload.overview : "";
+                const outputValue = typeof envelope.payload.output === 'string' ? envelope.payload.output : "";
+                await window.electron.db.saveWorkStory('story', overviewValue, outputValue, undefined, `[Shared] ${titleValue}`);
+                await loadHistory();
+                setAlertMessage("Received from teammate and added to Stories.");
+            } catch (err) {
+                console.error("Failed to import teammate story", err);
+                setAlertMessage("Could not import teammate file.");
+            }
+        };
+        input.click();
+    };
+
     const openSendStoryModal = (item: WorkStory, e?: React.MouseEvent) => {
         e?.stopPropagation();
         if (item.type !== 'story') return;
@@ -731,6 +760,15 @@ export default function TrackerPage() {
                                 className="h-6 w-full rounded-md border border-border bg-background/80 pl-8 pr-2 text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                             />
                         </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-1 h-6 w-6 shrink-0 text-muted-foreground"
+                            onClick={handleReceiveFromTeammate}
+                            title="Receive from teammate"
+                        >
+                            <Upload size={12} />
+                        </Button>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-1.5 space-y-2">
@@ -788,7 +826,7 @@ export default function TrackerPage() {
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-0.5 min-w-0">
-                                                <div className="font-medium text-[11px] leading-snug text-foreground truncate" title={item.title || item.overview || "Untitled Story"}>
+                                                <div className="font-bold text-[11px] leading-snug text-foreground truncate" title={item.title || item.overview || "Untitled Story"}>
                                                     {item.title || buildStoryTitle(item.overview || "", item.output || "")}
                                                 </div>
                                                 <Button
@@ -807,15 +845,15 @@ export default function TrackerPage() {
                                         </span>
                                     </div>
 
-                                    <div className="shrink-0 flex items-center overflow-hidden rounded-md border border-border bg-background/70">
+                                    <div className="shrink-0 flex items-center">
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-7 w-7 p-0 rounded-none border-0 bg-transparent hover:bg-secondary/70"
+                                            className="h-7 w-7 p-0 border-0 bg-transparent hover:bg-secondary/70"
                                             onClick={(e) => openItemMenu(item, e)}
                                             title="Actions"
                                         >
-                                            <MoreVertical size={12} />
+                                            <MoreVertical size={14} strokeWidth={2.5} />
                                         </Button>
                                     </div>
                                 </div>
@@ -873,7 +911,7 @@ export default function TrackerPage() {
 
                                 <button
                                     onClick={handleNewSession}
-                                    className="absolute left-1/2 -translate-x-1/2 h-7 px-2 text-[10px] font-bold italic uppercase tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 cursor-pointer hover:text-green-700 dark:hover:text-green-300 hover:opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 rounded-sm"
+                                    className="absolute left-1/2 -translate-x-1/2 h-7 px-2 text-[10px] font-bold italic tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 cursor-pointer hover:text-green-700 dark:hover:text-green-300 hover:opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 rounded-sm"
                                     title="Start New Session"
                                 >
                                     Clear/New Session
@@ -1053,7 +1091,7 @@ export default function TrackerPage() {
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
                         >
                             <Share2 size={14} className="text-secondary-foreground/60" />
-                            <span>Export .lazyshare</span>
+                            <span>Send as File</span>
                         </button>
                         <button
                             onClick={(e) => { setIsItemMenuOpen(false); void handleExportItem(itemMenuAnchor.item, e); }}

@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, ChevronRight, ChevronDown, Folder, Save, Copy, Download, Trash2, Mic, ListChecks, ArrowRight, CheckCircle2, XCircle, Loader2, Share2 } from "lucide-react";
+import { MoreVertical, ChevronRight, ChevronDown, Folder, Save, Copy, Download, Trash2, Mic, ListChecks, ArrowRight, CheckCircle2, XCircle, Loader2, Share2, Upload } from "lucide-react";
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
 import type { Meeting, ActionItem, Thread, MeetingTemplate, LanPeer, TeamSharePacket, TeamShareEvent } from "../../main/types";
-import { downloadLazyShareFile } from "../lib/lazyshare";
+import { downloadLazyShareFile, parseLazyShareFile } from "../lib/lazyshare";
 
 type ActionItemStatus = 'idle' | 'pushing' | 'pushed' | 'failed';
 
@@ -528,6 +528,35 @@ export default function MeetingPage() {
         );
     };
 
+    const handleReceiveFromTeammate = async () => {
+        if (!window.electron?.db) return;
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.lazyshare,application/json';
+        input.onchange = async (event) => {
+            const target = event.target as HTMLInputElement;
+            const selected = target.files?.[0];
+            if (!selected) return;
+            try {
+                const envelope = await parseLazyShareFile(selected);
+                if (envelope.kind !== 'meeting') {
+                    setAlertMessage("This file is not a meeting share.");
+                    return;
+                }
+                const titleValue = typeof envelope.payload.title === 'string' ? envelope.payload.title : DEFAULT_MEETING_TITLE;
+                const transcriptValue = typeof envelope.payload.transcript === 'string' ? envelope.payload.transcript : "";
+                const summaryValue = typeof envelope.payload.summary === 'string' ? envelope.payload.summary : "";
+                await window.electron.db.saveMeeting(`[Shared] ${titleValue}`, transcriptValue, summaryValue);
+                await loadHistory();
+                setAlertMessage("Received from teammate and added to Saved Meetings.");
+            } catch (err) {
+                console.error("Failed to import teammate meeting", err);
+                setAlertMessage("Could not import teammate file.");
+            }
+        };
+        input.click();
+    };
+
     const openSendMeetingModal = (item: Meeting, e?: React.MouseEvent) => {
         e?.stopPropagation();
         setPendingSendPacket({
@@ -879,10 +908,10 @@ export default function MeetingPage() {
                 <div className="flex items-center flex-1">
                     <button
                         onClick={() => { setTranscript(""); setSummary(""); setTitle(""); setRecordingTime(0); setSelectedMeetingId(null); setActionItems([]); setActionItemsVisible(false); }}
-                        className="h-7 text-[10px] font-bold italic uppercase tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 cursor-pointer hover:text-green-700 dark:hover:text-green-300 hover:opacity-90 transition-all focus-visible:outline-none ml-[25px]"
+                        className="h-7 text-[10px] font-bold italic tracking-wider text-green-600 dark:text-green-400 underline underline-offset-2 cursor-pointer hover:text-green-700 dark:hover:text-green-300 hover:opacity-90 transition-all focus-visible:outline-none ml-[25px]"
                         title="Clear Current Session"
                     >
-                        CLEAR/NEW SESSION
+                        Clear/New Session
                     </button>
 
                     <div className="flex-1" />
@@ -910,12 +939,21 @@ export default function MeetingPage() {
                                 <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center flex-1">
                                     SAVED MEETINGS
                                 </h3>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 shrink-0 text-muted-foreground"
+                                    onClick={handleReceiveFromTeammate}
+                                    title="Receive from teammate"
+                                >
+                                    <Upload size={12} />
+                                </Button>
                             </div>
                             <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
                                 {historyItems.length === 0 ? (
                                     <div className="text-center py-6 opacity-30 italic text-sm text-muted-foreground">No history</div>
                                 ) : (
-                                    <>
+                                    <div className="divide-y divide-border/60">
                                         {/* Threaded Meetings */}
                                         {threads.map(thread => {
                                             const threadMeetings = historyItems.filter(m => m.thread_id === thread.id);
@@ -1000,7 +1038,7 @@ export default function MeetingPage() {
                                                 ))}
                                             </div>
                                         )}
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         </aside>
@@ -1452,7 +1490,7 @@ export default function MeetingPage() {
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
                         >
                             <Share2 size={14} className="text-secondary-foreground/60" />
-                            <span>Export .lazyshare</span>
+                            <span>Send as File</span>
                         </button>
 
                         <button

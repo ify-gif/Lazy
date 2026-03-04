@@ -167,10 +167,10 @@ export const TeamShareService = {
                 try {
                     const ack = JSON.parse(line) as ProbeResponse;
                     if (ack.type !== 'lazy-probe-ack' || ack.version !== 1) {
-                        throw new Error('Invalid probe response');
+                        throw new Error('Invalid probe response from target');
                     }
                     if (ack.deviceId === profile.deviceId) {
-                        throw new Error('Cannot connect to same device');
+                        throw new Error('That IP belongs to this same device');
                     }
                     const peer: MutablePeer = {
                         deviceId: ack.deviceId,
@@ -202,14 +202,20 @@ export const TeamShareService = {
             });
             socket.on('timeout', () => {
                 socket.destroy();
-                if (!resolved) reject(new Error('Peer probe timed out'));
+                if (!resolved) reject(new Error('Connection timed out'));
             });
             socket.on('error', (err) => {
-                if (!resolved) reject(err);
+                if (!resolved) {
+                    if ((err as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
+                        reject(new Error('Target refused connection on LAN service'));
+                        return;
+                    }
+                    reject(new Error(err.message || 'Network error during connect'));
+                }
             });
             socket.on('close', () => {
                 if (!resolved && buffer.length === 0) {
-                    reject(new Error('No probe response received'));
+                    reject(new Error('Connected but no probe response (target app may be older)'));
                 }
             });
         });

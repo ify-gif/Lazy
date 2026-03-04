@@ -1,4 +1,4 @@
-import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link, Info } from "lucide-react";
+import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link, Info, ChevronDown, Pencil } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useTheme } from "next-themes";
 import { LanPeer, LocalTeamProfile, TeamDevice, TeamDiagnostics, TeamTrustMode, TeamShareEvent, UpdateEvent } from "../../main/types";
@@ -41,12 +41,18 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [isLanInfoOpen, setIsLanInfoOpen] = useState(false);
     const [manualPeerIp, setManualPeerIp] = useState("");
     const [isManualConnectRunning, setIsManualConnectRunning] = useState(false);
+    const [isLanDiagnosticsOpen, setIsLanDiagnosticsOpen] = useState(false);
+    const [localNameStatus, setLocalNameStatus] = useState("");
+    const [localNameStatusTone, setLocalNameStatusTone] = useState<'neutral' | 'success' | 'error'>('neutral');
+    const [isEditingLocalName, setIsEditingLocalName] = useState(false);
+    const [isPairingCodeFresh, setIsPairingCodeFresh] = useState(false);
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const animationFrameRef = useRef<number | null>(null);
     const maxVolumeRef = useRef(0);
+    const pairingCodeFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     function stopAudioOnly() {
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -99,6 +105,27 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             stopAudioOnly();
         }
     }, [isOpen]);
+
+    useEffect(() => {
+        return () => {
+            if (pairingCodeFlashTimeoutRef.current) {
+                clearTimeout(pairingCodeFlashTimeoutRef.current);
+                pairingCodeFlashTimeoutRef.current = null;
+            }
+        };
+    }, []);
+
+    const refreshPairingCode = () => {
+        setNewPairingCode(generatePairingCode());
+        setIsPairingCodeFresh(true);
+        if (pairingCodeFlashTimeoutRef.current) {
+            clearTimeout(pairingCodeFlashTimeoutRef.current);
+        }
+        pairingCodeFlashTimeoutRef.current = setTimeout(() => {
+            setIsPairingCodeFresh(false);
+            pairingCodeFlashTimeoutRef.current = null;
+        }, 1200);
+    };
 
     const runQuickTest = async () => {
         try {
@@ -192,6 +219,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             const profile = await window.electron.team.getLocalProfile();
             setLocalProfile(profile);
             setLocalDeviceNameEdit(profile.deviceName);
+            setIsEditingLocalName(false);
         } catch (err) {
             console.error("Failed to load local team profile", err);
         }
@@ -262,7 +290,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
         try {
             await window.electron.db.saveTeamDevice(trimmed, newPairingCode);
             setNewDeviceName("");
-            setNewPairingCode(generatePairingCode());
+            refreshPairingCode();
             await loadTeamDevices();
         } catch (err) {
             console.error("Failed to save team device", err);
@@ -303,7 +331,8 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             await loadDiagnostics();
         } catch (err) {
             console.error("Manual peer connect failed", err);
-            setPairStatus("Could not connect to that IP.");
+            const message = err instanceof Error ? err.message : "Could not connect to that IP.";
+            setPairStatus(message);
             setPairStatusTone('error');
         } finally {
             setIsManualConnectRunning(false);
@@ -336,8 +365,17 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             const profile = await window.electron.team.setLocalDeviceName(localDeviceNameEdit);
             setLocalProfile(profile);
             setLocalDeviceNameEdit(profile.deviceName);
+            setIsEditingLocalName(false);
+            setLocalNameStatus("Saved");
+            setLocalNameStatusTone('success');
+            setTimeout(() => {
+                setLocalNameStatus("");
+                setLocalNameStatusTone('neutral');
+            }, 1800);
         } catch (err) {
             console.error("Failed to save local device name", err);
+            setLocalNameStatus("Could not save");
+            setLocalNameStatusTone('error');
         }
     };
 
@@ -592,20 +630,20 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                             <Globe size={14} /> System
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-muted/20 border border-border rounded-lg">
+                        <div className="flex items-center justify-between p-2.5 bg-muted/20 border border-border rounded-lg">
                             <div className="flex flex-col gap-0.5 min-w-0">
                                 <span className="text-xs font-bold text-foreground truncate">{updateStatus}</span>
                                 <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Public Channel</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                                 <Button
-                                    variant="outline"
+                                    variant="primary"
                                     size="sm"
                                     onClick={() => {
                                         window.dispatchEvent(new CustomEvent('show-release-notes'));
                                         onClose();
                                     }}
-                                    className="px-3"
+                                    className="h-8 px-3"
                                 >
                                     Release Notes
                                 </Button>
@@ -615,7 +653,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         size="sm"
                                         onClick={isUpdateDownloaded ? () => window.electron.updates.install() : handleDownloadUpdate}
                                         disabled={isDownloading}
-                                        className="px-4 py-1 animate-pulse"
+                                        className="h-8 px-3 animate-pulse"
                                     >
                                         <RefreshCw size={12} className={`mr-1.5 ${isDownloading ? 'animate-spin' : ''}`} />
                                         {isDownloading ? "Downloading..." : isUpdateDownloaded ? "Restart Now" : "Download"}
@@ -625,7 +663,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         variant={checkStatus === 'uptodate' ? 'success' : checkStatus === 'error' ? 'destructive' : 'outline'}
                                         size="sm"
                                         onClick={checkUpdates}
-                                        className="min-w-[120px]"
+                                        className="h-8 min-w-[112px]"
                                         isLoading={checkStatus === 'checking'}
                                     >
                                         {checkStatus === 'uptodate' ? "Up to date" :
@@ -646,20 +684,55 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                             {localProfile && (
                                 <div className="rounded border border-border bg-background/80 p-2">
                                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">This Device</p>
-                                    <div className="mt-1 grid grid-cols-[1fr_auto] gap-2">
-                                        <Input
-                                            value={localDeviceNameEdit}
-                                            onChange={(e) => setLocalDeviceNameEdit(e.target.value)}
-                                        />
-                                        <Button
-                                            variant="primary"
-                                            size="sm"
-                                            onClick={saveLocalDeviceName}
-                                            className="h-10 min-w-[88px] font-semibold"
-                                        >
-                                            Save
-                                        </Button>
-                                    </div>
+                                    {isEditingLocalName ? (
+                                        <div className="mt-1 grid grid-cols-[1fr_auto] gap-2">
+                                            <Input
+                                                value={localDeviceNameEdit}
+                                                onChange={(e) => {
+                                                    setLocalDeviceNameEdit(e.target.value);
+                                                    if (localNameStatus) {
+                                                        setLocalNameStatus("");
+                                                        setLocalNameStatusTone('neutral');
+                                                    }
+                                                }}
+                                            />
+                                            <Button
+                                                variant="primary"
+                                                size="sm"
+                                                onClick={saveLocalDeviceName}
+                                                className="h-10 min-w-[88px] font-semibold"
+                                            >
+                                                Save
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="mt-1 flex items-center justify-between gap-1 rounded border border-border bg-muted/20">
+                                            <p className="text-sm leading-tight font-bold text-foreground px-2 py-1">{localProfile.deviceName}</p>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-5 w-5 mr-1"
+                                                onClick={() => {
+                                                    setIsEditingLocalName(true);
+                                                    setLocalNameStatus("");
+                                                    setLocalNameStatusTone('neutral');
+                                                }}
+                                                title="Edit device name"
+                                            >
+                                                <Pencil size={14} />
+                                            </Button>
+                                        </div>
+                                    )}
+                                    {localNameStatus && (
+                                        <p className={`mt-1 text-[10px] ${localNameStatusTone === 'success'
+                                            ? 'text-green-600 dark:text-green-400'
+                                            : localNameStatusTone === 'error'
+                                                ? 'text-red-600 dark:text-red-400'
+                                                : 'text-muted-foreground'
+                                            }`}>
+                                            {localNameStatus}
+                                        </p>
+                                    )}
                                     <p className="mt-1 text-[10px] font-mono text-muted-foreground">
                                         Code {localProfile.pairingCode} | {localProfile.fingerprint}
                                     </p>
@@ -699,16 +772,17 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         </div>
                                     ))}
                                 </div>
-                                <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                                <div className="mt-2 grid grid-cols-[1fr_auto] gap-1.5">
                                     <Input
                                         placeholder="Direct connect by IP (e.g. 192.168.1.24)"
                                         value={manualPeerIp}
                                         onChange={(e) => setManualPeerIp(e.target.value)}
+                                        className="h-9"
                                     />
                                     <Button
-                                        variant="outline"
+                                        variant="primary"
                                         size="sm"
-                                        className="h-10 px-3 text-muted-foreground"
+                                        className="h-9 px-3"
                                         onClick={() => void handleManualPeerConnect()}
                                         disabled={!manualPeerIp.trim() || isManualConnectRunning}
                                     >
@@ -735,51 +809,67 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                             onClick={() => setIsLanInfoOpen(true)}
                                         >
                                             <Info size={12} />
+                                            </button>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button variant="primary" size="sm" className="h-7 px-2" onClick={() => void loadDiagnostics()}>
+                                            <RefreshCw size={12} className="mr-1" /> Refresh
+                                        </Button>
+                                        <button
+                                            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-secondary cursor-pointer"
+                                            onClick={() => setIsLanDiagnosticsOpen((prev) => !prev)}
+                                            title={isLanDiagnosticsOpen ? "Hide diagnostics" : "Show diagnostics"}
+                                        >
+                                            <ChevronDown size={14} className={`transition-transform ${isLanDiagnosticsOpen ? "rotate-180" : ""}`} />
                                         </button>
                                     </div>
-                                    <Button variant="outline" size="sm" className="h-7 px-2 text-muted-foreground" onClick={() => void loadDiagnostics()}>
-                                        <RefreshCw size={12} className="mr-1" /> Refresh
-                                    </Button>
                                 </div>
-                                {!teamDiagnostics ? (
-                                    <p className="mt-2 text-[11px] italic text-muted-foreground">Diagnostics unavailable.</p>
-                                ) : (
-                                    <div className="mt-2 grid grid-cols-2 gap-1 text-[10px] font-mono text-muted-foreground">
-                                        <span>UDP bound:</span><span>{teamDiagnostics.discoveryBound ? "yes" : "no"}</span>
-                                        <span>UDP port:</span><span>{teamDiagnostics.discoveryPort}</span>
-                                        <span>UDP error:</span><span className={teamDiagnostics.discoveryError ? "text-red-600 dark:text-red-400" : ""}>{teamDiagnostics.discoveryError || "-"}</span>
-                                        <span>Broadcast paths:</span><span>{teamDiagnostics.broadcastTargets?.length ?? 0}</span>
-                                        <span>Local IPs:</span><span>{teamDiagnostics.localAddresses?.join(", ") || "-"}</span>
-                                        <span>TCP listening:</span><span>{teamDiagnostics.tcpListening ? "yes" : "no"}</span>
-                                        <span>TCP port:</span><span>{teamDiagnostics.tcpPort || "-"}</span>
-                                        <span>Peers seen:</span><span>{teamDiagnostics.peerCount}</span>
-                                        <span>Profile ready:</span><span>{teamDiagnostics.profileReady ? "yes" : "no"}</span>
-                                        <span>Last broadcast:</span>
-                                        <span>{teamDiagnostics.lastBroadcastAt ? new Date(teamDiagnostics.lastBroadcastAt).toLocaleTimeString() : "-"}</span>
-                                    </div>
+                                {isLanDiagnosticsOpen && (
+                                    !teamDiagnostics ? (
+                                        <p className="mt-2 text-[11px] italic text-muted-foreground">Diagnostics unavailable.</p>
+                                    ) : (
+                                        <div className="mt-2 grid grid-cols-2 gap-1 text-[10px] font-mono text-muted-foreground">
+                                            <span>UDP bound:</span><span>{teamDiagnostics.discoveryBound ? "yes" : "no"}</span>
+                                            <span>UDP port:</span><span>{teamDiagnostics.discoveryPort}</span>
+                                            <span>UDP error:</span><span className={teamDiagnostics.discoveryError ? "text-red-600 dark:text-red-400" : ""}>{teamDiagnostics.discoveryError || "-"}</span>
+                                            <span>Broadcast paths:</span><span>{teamDiagnostics.broadcastTargets?.length ?? 0}</span>
+                                            <span>Local IPs:</span><span>{teamDiagnostics.localAddresses?.join(", ") || "-"}</span>
+                                            <span>TCP listening:</span><span>{teamDiagnostics.tcpListening ? "yes" : "no"}</span>
+                                            <span>TCP port:</span><span>{teamDiagnostics.tcpPort || "-"}</span>
+                                            <span>Peers seen:</span><span>{teamDiagnostics.peerCount}</span>
+                                            <span>Profile ready:</span><span>{teamDiagnostics.profileReady ? "yes" : "no"}</span>
+                                            <span>Last broadcast:</span>
+                                            <span>{teamDiagnostics.lastBroadcastAt ? new Date(teamDiagnostics.lastBroadcastAt).toLocaleTimeString() : "-"}</span>
+                                        </div>
+                                    )
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
-                                <Input
+                            <div className="grid grid-cols-[minmax(0,1fr)_112px_36px] items-center gap-1">
+                                <input
                                     placeholder="Device name (e.g. Sarah-Laptop)"
                                     value={newDeviceName}
                                     onChange={(e) => setNewDeviceName(e.target.value)}
+                                    className="h-9 w-full rounded-md border border-border bg-secondary px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                                 />
-                                <Input
+                                <input
                                     value={newPairingCode}
-                                    onChange={(e) => setNewPairingCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                                    className="w-24 text-center font-mono"
+                                    readOnly
+                                    aria-label="Generated pairing code"
+                                    className={`h-9 w-full rounded-md border bg-secondary px-0 text-center font-mono text-sm text-foreground transition-colors ${
+                                        isPairingCodeFresh
+                                            ? "border-green-600 dark:border-green-500"
+                                            : "border-border"
+                                    }`}
                                 />
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="px-2"
-                                    onClick={() => setNewPairingCode(generatePairingCode())}
+                                <button
+                                    type="button"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-primary p-0 text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                                    onClick={refreshPairingCode}
                                     title="Regenerate pairing code"
                                 >
                                     <RefreshCw size={12} />
-                                </Button>
+                                </button>
                             </div>
                             <Button
                                 variant="primary"
@@ -833,8 +923,8 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
 
                 {/* Footer */}
                 <div className="p-4 bg-muted/40 border-t border-border flex justify-end gap-3">
-                    <Button variant="outline" onClick={onClose} className="px-6">Cancel</Button>
-                    <Button variant="secondary" onClick={handleSave} className="px-8">Save Changes</Button>
+                    <Button variant="destructive" onClick={onClose} className="px-6">Cancel</Button>
+                    <Button variant="primary" onClick={handleSave} className="px-8">Save Changes</Button>
                 </div>
 
             </div>

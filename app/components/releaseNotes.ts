@@ -7,6 +7,18 @@ export interface ReleaseNote {
 
 const RELEASE_NOTES: ReleaseNote[] = [
     {
+        version: "1.2.12",
+        heading: "Team sharing is easier to pair, send, and troubleshoot",
+        why: "This release adds two major team-sharing upgrades and fixes the UI issues that were making Settings and history actions feel crowded.",
+        items: [
+            "New feature: Direct teammate connection by IP in My Team, with clearer success/error feedback when connect attempts fail.",
+            "New feature: Improved teammate file handoff flow (Send as File/Receive) for local BYOK sharing across Lazy installs.",
+            "Bug fixes: Settings controls were compacted and aligned (save/connect/refresh/regenerate), including cleaner device code generation visuals.",
+            "Bug fixes: LAN diagnostics now include a cleaner collapsible panel and more stable diagnostics refresh behavior.",
+            "Bug fixes: Meeting/Tracker list and action UI polish (title weight, menu cleanup, and dividers for clearer saved-meeting grouping)."
+        ]
+    },
+    {
         version: "1.2.9",
         heading: "LAN discovery now broadcasts across active network paths",
         why: "Some local networks were not returning peers even when both apps were healthy. Discovery now uses broader broadcast targeting and clearer diagnostics.",

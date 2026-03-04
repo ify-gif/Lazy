@@ -7,6 +7,64 @@ export interface ReleaseNote {
 
 const RELEASE_NOTES: ReleaseNote[] = [
     {
+        version: "1.2.9",
+        heading: "LAN discovery now broadcasts across active network paths",
+        why: "Some local networks were not returning peers even when both apps were healthy. Discovery now uses broader broadcast targeting and clearer diagnostics.",
+        items: [
+            "LAN peer discovery now broadcasts to global and interface-specific broadcast paths.",
+            "Added diagnostics for broadcast path count so scan routing is visible.",
+            "Improved reliability when both devices are on the same LAN but default broadcast is filtered."
+        ]
+    },
+    {
+        version: "1.2.8",
+        heading: "Team scan reliability and diagnostics have been strengthened",
+        why: "Pairing issues were hard to diagnose on some machines. This update adds stronger socket handling and clearer status for local team sharing.",
+        items: [
+            "Scan now attempts UDP rebind automatically if discovery is not bound.",
+            "Added UDP error visibility in LAN diagnostics for faster troubleshooting.",
+            "Added LAN diagnostics panel and scan status feedback in Settings > My Team."
+        ]
+    },
+    {
+        version: "1.2.7",
+        heading: "My Team now includes built-in LAN troubleshooting",
+        why: "You need immediate visibility into why peer discovery works or fails without external debugging tools.",
+        items: [
+            "Added LAN diagnostics metrics: UDP/TCP state, peers seen, last broadcast, profile readiness.",
+            "Added manual diagnostics refresh and clearer scan status feedback.",
+            "Improved team sharing UX in Settings with scan and pairing context."
+        ]
+    },
+    {
+        version: "1.2.6",
+        heading: "Scan flow is safer across mixed app versions",
+        why: "Some users hit runtime errors when renderer and preload APIs were out of sync.",
+        items: [
+            "Added compatibility guard so scan no longer crashes when older runtime APIs are loaded.",
+            "Improved status messaging to guide restart/update when API mismatch is detected."
+        ]
+    },
+    {
+        version: "1.2.5",
+        heading: "LAN scan now performs active discovery",
+        why: "Scan previously looked passive on some systems. It now performs active broadcast/refresh cycles with visible feedback.",
+        items: [
+            "Scan now actively broadcasts and waits for peer responses before presenting results.",
+            "Added explicit scan progress and completion status messaging."
+        ]
+    },
+    {
+        version: "1.2.4",
+        heading: "Local team sharing launched for meetings and stories",
+        why: "You can now move work between Lazy installs without account sign-in using local team/device trust.",
+        items: [
+            "Added My Team device records with pairing code, fingerprint, and trust mode.",
+            "Added LAN send flow for meetings and stories with direct import into destination app.",
+            "Added .lazyshare export/import fallback for offline handoff."
+        ]
+    },
+    {
         version: "1.2.3",
         heading: "Safe Folder Deletion & UI Refinements",
         why: "We've added powerful folder management and polished the interface for a smoother, more intuitive experience.",
@@ -56,11 +114,11 @@ export function getReleaseNote(version: string): ReleaseNote {
 
     return {
         version,
-        heading: "App update installed",
-        why: "This version includes stability, quality, and usability improvements.",
+        heading: "Version update installed",
+        why: "This release includes targeted improvements and fixes for stability and usability.",
         items: [
-            "General performance and reliability improvements.",
-            "User experience refinements and bug fixes."
+            "Bug fixes and reliability improvements across core flows.",
+            "UI refinements and quality updates."
         ]
     };
 }

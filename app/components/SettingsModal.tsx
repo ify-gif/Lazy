@@ -649,7 +649,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 px-2"
+                                        className="h-7 px-2 text-muted-foreground"
                                         onClick={() => void handleScanPeers()}
                                         disabled={isScanningPeers}
                                     >
@@ -698,7 +698,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                             <Info size={12} />
                                         </button>
                                     </div>
-                                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => void loadDiagnostics()}>
+                                    <Button variant="outline" size="sm" className="h-7 px-2 text-muted-foreground" onClick={() => void loadDiagnostics()}>
                                         <RefreshCw size={12} className="mr-1" /> Refresh
                                     </Button>
                                 </div>

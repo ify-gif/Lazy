@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Button from "./Button";
-import Modal from "./Modal";
+import { X } from "lucide-react";
 import { getReleaseNote, ReleaseNote } from "./releaseNotes";
 
 export default function ReleaseNotesModal() {
@@ -112,30 +112,36 @@ export default function ReleaseNotesModal() {
     if (!note) return null;
 
     return (
-        <Modal
-            isOpen={isOpen}
-            onClose={handleClose}
-            title={`What's New - v${note.version}`}
-            footer={
-                <Button onClick={handleClose} size="sm">
-                    Continue
-                </Button>
-            }
-        >
-            <div className="space-y-3">
-                <div>
-                    <p className="text-sm font-semibold text-foreground">{note.heading}</p>
-                    <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{note.why}</p>
+        <div className={`fixed inset-0 z-[110] ${isOpen ? "flex" : "hidden"} items-center justify-center bg-black/50 backdrop-blur-sm`}>
+            <div className="w-[760px] max-w-[94vw] max-h-[82vh] rounded-lg border border-border bg-card shadow-xl overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/30">
+                    <h2 className="text-lg font-bold text-foreground">{`What's New - v${note.version}`}</h2>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose}>
+                        <X size={18} />
+                    </Button>
                 </div>
-                <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Included in this version</p>
-                    <ul className="mt-2 list-disc pl-5 space-y-1 text-sm text-foreground">
-                        {note.items.map((item) => (
-                            <li key={item}>{item}</li>
-                        ))}
-                    </ul>
+                <div className="px-5 py-4 overflow-y-auto max-h-[62vh]">
+                    <div className="space-y-4">
+                        <div>
+                            <p className="text-base font-semibold text-foreground">{note.heading}</p>
+                            <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{note.why}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Included in this version</p>
+                            <ul className="mt-2 list-disc pl-5 space-y-2 text-sm text-foreground">
+                                {note.items.map((item) => (
+                                    <li key={item}>{item}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div className="px-5 py-3 border-t border-border bg-muted/20 flex justify-end">
+                    <Button onClick={handleClose} size="sm">
+                        Continue
+                    </Button>
                 </div>
             </div>
-        </Modal>
+        </div>
     );
 }

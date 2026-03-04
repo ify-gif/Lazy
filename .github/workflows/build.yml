@@ -36,10 +36,40 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        shell: pwsh
+        run: |
+          $maxAttempts = 3
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "npm ci attempt $attempt/$maxAttempts"
+            npm ci
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "npm ci succeeded"
+              exit 0
+            }
+            if ($attempt -lt $maxAttempts) {
+              Write-Host "npm ci failed; retrying in 15 seconds..."
+              Start-Sleep -Seconds 15
+            }
+          }
+          throw "npm ci failed after $maxAttempts attempts"
 
       - name: Install Playwright Chromium
-        run: npx playwright install chromium
+        shell: pwsh
+        run: |
+          $maxAttempts = 2
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "Playwright install attempt $attempt/$maxAttempts"
+            npx playwright install chromium
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Playwright install succeeded"
+              exit 0
+            }
+            if ($attempt -lt $maxAttempts) {
+              Write-Host "Playwright install failed; retrying in 10 seconds..."
+              Start-Sleep -Seconds 10
+            }
+          }
+          throw "Playwright install failed after $maxAttempts attempts"
 
       - name: Verify release quality gate (Windows)
         if: runner.os == 'Windows'

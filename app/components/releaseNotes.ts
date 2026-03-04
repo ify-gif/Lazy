@@ -7,7 +7,7 @@ export interface ReleaseNote {
 
 const RELEASE_NOTES: ReleaseNote[] = [
     {
-        version: "1.2.2",
+        version: "1.2.3",
         heading: "Safe Folder Deletion & UI Refinements",
         why: "We've added powerful folder management and polished the interface for a smoother, more intuitive experience.",
         items: [

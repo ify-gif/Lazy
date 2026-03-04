@@ -1361,7 +1361,7 @@ export default function MeetingPage() {
             >
                 <div className="space-y-4">
                     <div className="text-sm text-muted-foreground leading-relaxed">
-                        Are you sure you want to delete <span className="text-foreground font-bold">"{threads.find(t => t.id === pendingDeleteThreadId)?.name}"</span>?
+                        Are you sure you want to delete <span className="text-foreground font-bold">&quot;{threads.find(t => t.id === pendingDeleteThreadId)?.name}&quot;</span>?
                         <p className="mt-2 text-[11px] text-primary/70 bg-primary/5 p-2 rounded border border-primary/10 italic">
                             All meetings within this folder will be un-grouped (moved to Standalone). No meetings will be deleted.
                         </p>

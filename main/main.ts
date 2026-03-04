@@ -190,6 +190,7 @@ import { DBService } from './dbService';
 void DBService.init().catch((err) => {
     logger.error('DB initialization failed', err);
 });
+import { TeamShareService } from './teamShareService';
 
 // Auto Updater
 import { autoUpdater } from 'electron-updater';
@@ -299,8 +300,12 @@ ipcMain.handle('ai-validate-key', async (_event, apiKey: string) => {
 });
 
 // DB Handlers
-ipcMain.handle('db-save-meeting', async (_event, { title, transcript, summary, threadId }) => {
-    return await DBService.saveMeeting(title, transcript, summary, threadId);
+ipcMain.handle('db-save-meeting', async (_event, payload, transcriptArg, summaryArg, threadIdArg) => {
+    if (typeof payload === 'object' && payload !== null) {
+        const { title, transcript, summary, threadId } = payload as { title: string; transcript: string; summary: string; threadId?: number };
+        return await DBService.saveMeeting(title, transcript, summary, threadId);
+    }
+    return await DBService.saveMeeting(payload as string, transcriptArg as string, summaryArg as string, threadIdArg as number | undefined);
 });
 
 ipcMain.handle('db-update-meeting-thread', async (_event, meetingId, threadId) => {
@@ -327,8 +332,26 @@ ipcMain.handle('db-get-meetings', async () => {
     return await DBService.getMeetings();
 });
 
-ipcMain.handle('db-save-work-story', async (_event, { type, title, overview, output, parentId, sourceMeetingId }) => {
-    return await DBService.saveWorkStory(type, overview, output, parentId, title, sourceMeetingId);
+ipcMain.handle('db-save-work-story', async (_event, payload, overviewArg, outputArg, parentIdArg, titleArg, sourceMeetingIdArg) => {
+    if (typeof payload === 'object' && payload !== null) {
+        const { type, title, overview, output, parentId, sourceMeetingId } = payload as {
+            type: 'story' | 'comment';
+            title?: string;
+            overview: string;
+            output: string;
+            parentId?: number;
+            sourceMeetingId?: number;
+        };
+        return await DBService.saveWorkStory(type, overview, output, parentId, title, sourceMeetingId);
+    }
+    return await DBService.saveWorkStory(
+        payload as 'story' | 'comment',
+        overviewArg as string,
+        outputArg as string,
+        parentIdArg as number | undefined,
+        titleArg as string | undefined,
+        sourceMeetingIdArg as number | undefined
+    );
 });
 
 ipcMain.handle('db-get-work-stories', async () => {
@@ -350,6 +373,22 @@ ipcMain.handle('db-delete-item', async (_event, { table, id }) => {
     return await DBService.deleteItem(table, id);
 });
 
+ipcMain.handle('db-get-team-devices', async () => {
+    return await DBService.getTeamDevices();
+});
+
+ipcMain.handle('db-save-team-device', async (_event, { deviceName, pairingCode }) => {
+    return await DBService.saveTeamDevice(deviceName, pairingCode);
+});
+
+ipcMain.handle('db-update-team-device-trust-mode', async (_event, { deviceId, trustMode }) => {
+    return await DBService.updateTeamDeviceTrustMode(deviceId, trustMode);
+});
+
+ipcMain.handle('db-delete-team-device', async (_event, { deviceId }) => {
+    return await DBService.deleteTeamDevice(deviceId);
+});
+
 ipcMain.on('app-status-update', (_event, { status, message }) => {
     broadcastStatus(status, message);
 });
@@ -358,8 +397,25 @@ ipcMain.handle('get-app-version', () => {
     return app.getVersion();
 });
 
+ipcMain.handle('team-get-local-profile', () => {
+    return TeamShareService.getLocalProfile();
+});
+
+ipcMain.handle('team-set-local-device-name', (_event, name: string) => {
+    return TeamShareService.setLocalDeviceName(name);
+});
+
+ipcMain.handle('team-get-peers', () => {
+    return TeamShareService.getPeers();
+});
+
+ipcMain.handle('team-send-share', async (_event, { peerDeviceId, packet }) => {
+    return await TeamShareService.sendShare(peerDeviceId, packet);
+});
+
 app.whenReady().then(async () => {
     await createWindow();
+    await TeamShareService.start();
 
     // Check for updates periodically (every hour)
     const CHECK_INTERVAL = 1000 * 60 * 60; // 60 minutes
@@ -382,6 +438,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+    TeamShareService.stop();
     staticServer?.close();
     staticServer = null;
     if (process.platform !== 'darwin') app.quit();

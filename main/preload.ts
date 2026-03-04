@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate } from './types';
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent } from './types';
 
 contextBridge.exposeInMainWorld('electron', {
     windowControls: {
@@ -56,6 +56,24 @@ contextBridge.exposeInMainWorld('electron', {
         updateWorkStoryTitle: (id: number, title: string): Promise<void> => ipcRenderer.invoke('db-update-work-story-title', { id, title }),
         deleteThread: (threadId: number): Promise<void> => ipcRenderer.invoke('db-delete-thread', threadId),
         deleteItem: (table: 'meetings' | 'work_stories', id: number): Promise<void> => ipcRenderer.invoke('db-delete-item', { table, id }),
+        getTeamDevices: (): Promise<TeamDevice[]> => ipcRenderer.invoke('db-get-team-devices'),
+        saveTeamDevice: (deviceName: string, pairingCode: string): Promise<TeamDevice> =>
+            ipcRenderer.invoke('db-save-team-device', { deviceName, pairingCode }),
+        updateTeamDeviceTrustMode: (deviceId: string, trustMode: TeamTrustMode): Promise<void> =>
+            ipcRenderer.invoke('db-update-team-device-trust-mode', { deviceId, trustMode }),
+        deleteTeamDevice: (deviceId: string): Promise<void> => ipcRenderer.invoke('db-delete-team-device', { deviceId }),
+    },
+    team: {
+        getLocalProfile: (): Promise<LocalTeamProfile> => ipcRenderer.invoke('team-get-local-profile'),
+        setLocalDeviceName: (name: string): Promise<LocalTeamProfile> => ipcRenderer.invoke('team-set-local-device-name', name),
+        getPeers: (): Promise<LanPeer[]> => ipcRenderer.invoke('team-get-peers'),
+        sendShare: (peerDeviceId: string, packet: TeamSharePacket): Promise<void> =>
+            ipcRenderer.invoke('team-send-share', { peerDeviceId, packet }),
+        onEvent: (callback: (event: TeamShareEvent) => void) => {
+            const subscription = (_event: unknown, event: TeamShareEvent) => callback(event);
+            ipcRenderer.on('team-share-event', subscription);
+            return () => ipcRenderer.removeListener('team-share-event', subscription);
+        },
     },
     platform: process.platform
 });

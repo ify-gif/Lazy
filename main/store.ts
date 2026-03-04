@@ -11,6 +11,10 @@ interface Config {
     releaseNotesSeenVersion?: string;
     lastRunVersion?: string;
     pendingReleaseNotesVersion?: string;
+    localDeviceId?: string;
+    localDeviceName?: string;
+    localPairingCode?: string;
+    localFingerprint?: string;
 }
 
 function readConfig(): Config {

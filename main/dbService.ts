@@ -1,7 +1,8 @@
 import sqlite3 from 'sqlite3';
 import { app } from 'electron';
 import path from 'path';
-import { Meeting, WorkStory, Thread } from './types';
+import { createHash, randomUUID } from 'crypto';
+import { Meeting, WorkStory, Thread, TeamDevice, TeamTrustMode } from './types';
 
 const dbPath = path.join(app.getPath('userData'), 'lazy_history.db');
 
@@ -110,6 +111,23 @@ export const DBService = {
                 id: '007_add_meeting_thread_id',
                 run: async () => {
                     await this.addColumnIfMissing('meetings', 'thread_id', 'INTEGER');
+                },
+            },
+            {
+                id: '008_create_team_devices',
+                run: async () => {
+                    await this.run(`
+                        CREATE TABLE IF NOT EXISTS team_devices (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            device_id TEXT NOT NULL UNIQUE,
+                            device_name TEXT NOT NULL,
+                            pairing_code TEXT NOT NULL,
+                            fingerprint TEXT NOT NULL,
+                            trust_mode TEXT NOT NULL DEFAULT 'ask',
+                            last_seen_at DATETIME,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `);
                 },
             },
         ];
@@ -380,5 +398,90 @@ export const DBService = {
                 });
             });
         });
+    },
+
+    // Team Devices
+    async getTeamDevices(): Promise<TeamDevice[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.all('SELECT * FROM team_devices ORDER BY created_at DESC', (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows as TeamDevice[]);
+            });
+        });
+    },
+
+    async saveTeamDevice(deviceName: string, pairingCode: string): Promise<TeamDevice> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        const cleanName = deviceName.trim();
+        if (!cleanName) {
+            throw new Error('Device name is required');
+        }
+        if (!/^\d{6}$/.test(pairingCode)) {
+            throw new Error('Pairing code must be 6 digits');
+        }
+
+        const deviceId = randomUUID();
+        const fingerprint = this.createFingerprint(deviceId);
+
+        return new Promise((resolve, reject) => {
+            db.run(
+                'INSERT INTO team_devices (device_id, device_name, pairing_code, fingerprint, trust_mode) VALUES (?, ?, ?, ?, ?)',
+                [deviceId, cleanName, pairingCode, fingerprint, 'ask'],
+                async (err) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    try {
+                        const [created] = await this.all<TeamDevice>('SELECT * FROM team_devices WHERE device_id = ?', [deviceId]);
+                        if (!created) {
+                            reject(new Error('Failed to fetch saved team device'));
+                            return;
+                        }
+                        resolve(created);
+                    } catch (fetchErr) {
+                        reject(fetchErr);
+                    }
+                }
+            );
+        });
+    },
+
+    async updateTeamDeviceTrustMode(deviceId: string, trustMode: TeamTrustMode): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        if (!['trusted', 'ask', 'blocked'].includes(trustMode)) {
+            throw new Error('Invalid trust mode');
+        }
+        return new Promise((resolve, reject) => {
+            db.run(
+                'UPDATE team_devices SET trust_mode = ? WHERE device_id = ?',
+                [trustMode, deviceId],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    },
+
+    async deleteTeamDevice(deviceId: string): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run('DELETE FROM team_devices WHERE device_id = ?', [deviceId], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+    },
+
+    createFingerprint(seed: string): string {
+        const hash = createHash('sha256').update(seed).digest('hex').toUpperCase();
+        const short = hash.slice(0, 12);
+        return `${short.slice(0, 4)}-${short.slice(4, 8)}-${short.slice(8, 12)}`;
     }
 };

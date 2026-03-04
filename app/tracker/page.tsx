@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-    Mic, Plus, Trash2, Copy, Download, Search, Pencil, Check, X
+    Mic, Plus, Trash2, Copy, Download, Search, Pencil, Check, X, Share2, MoreVertical
 } from "lucide-react";
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
-import type { WorkStory, AIResponse } from "../../main/types";
+import type { WorkStory, AIResponse, LanPeer, TeamSharePacket, TeamShareEvent } from "../../main/types";
+import { downloadLazyShareFile } from "../lib/lazyshare";
 
 type AudioContextCtor = typeof AudioContext;
 type ExtendedWindow = Window & { webkitAudioContext?: AudioContextCtor };
@@ -39,6 +40,11 @@ export default function TrackerPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [editingStoryId, setEditingStoryId] = useState<number | null>(null);
     const [editingStoryTitle, setEditingStoryTitle] = useState("");
+    const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+    const [lanPeers, setLanPeers] = useState<LanPeer[]>([]);
+    const [pendingSendPacket, setPendingSendPacket] = useState<TeamSharePacket | null>(null);
+    const [isItemMenuOpen, setIsItemMenuOpen] = useState(false);
+    const [itemMenuAnchor, setItemMenuAnchor] = useState<{ x: number; y: number; item: WorkStory } | null>(null);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
@@ -72,8 +78,33 @@ export default function TrackerPage() {
         }
     };
 
+    const loadLanPeers = async () => {
+        if (!window.electron?.team) return;
+        try {
+            const peers = await window.electron.team.getPeers();
+            setLanPeers(peers);
+        } catch (err) {
+            console.error("Failed to load LAN peers", err);
+        }
+    };
+
     useEffect(() => {
         loadHistory();
+        loadLanPeers();
+    }, []);
+
+    useEffect(() => {
+        if (!window.electron?.team) return;
+        const unsubscribe = window.electron.team.onEvent((event: TeamShareEvent) => {
+            if (event.event === 'peers-updated') {
+                void loadLanPeers();
+            }
+            if (event.event === 'share-imported') {
+                void loadHistory();
+                setAlertMessage("Received shared item from teammate.");
+            }
+        });
+        return unsubscribe;
     }, []);
 
     useEffect(() => {
@@ -328,8 +359,8 @@ export default function TrackerPage() {
         URL.revokeObjectURL(url);
     };
 
-    const handleExportItem = async (item: WorkStory, e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleExportItem = async (item: WorkStory, e?: React.MouseEvent) => {
+        e?.stopPropagation();
         if (!item.output || !window.electron?.db) return;
 
         let content = item.output;
@@ -358,6 +389,56 @@ export default function TrackerPage() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    };
+
+    const handleExportLazyShareItem = (item: WorkStory, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (item.type !== 'story') return;
+        downloadLazyShareFile(
+            {
+                version: 1,
+                kind: 'story',
+                shared_at: new Date().toISOString(),
+                payload: {
+                    title: item.title || "Untitled Story",
+                    overview: item.overview || "",
+                    output: item.output || "",
+                    created_at: item.created_at || new Date().toISOString(),
+                },
+            },
+            item.title || "story-share"
+        );
+    };
+
+    const openSendStoryModal = (item: WorkStory, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (item.type !== 'story') return;
+        setPendingSendPacket({
+            version: 1,
+            kind: 'story',
+            shared_at: new Date().toISOString(),
+            payload: {
+                title: item.title || "Untitled Story",
+                overview: item.overview || "",
+                output: item.output || "",
+                created_at: item.created_at || new Date().toISOString(),
+            },
+        });
+        setIsSendModalOpen(true);
+        void loadLanPeers();
+    };
+
+    const handleSendToPeer = async (peerDeviceId: string) => {
+        if (!window.electron?.team || !pendingSendPacket) return;
+        try {
+            await window.electron.team.sendShare(peerDeviceId, pendingSendPacket);
+            setIsSendModalOpen(false);
+            setPendingSendPacket(null);
+            setAlertMessage("Story sent over LAN.");
+        } catch (err) {
+            console.error("Failed to send LAN story", err);
+            setAlertMessage("Could not send to selected teammate.");
+        }
     };
 
     const handleSelectItem = (item: WorkStory) => {
@@ -415,9 +496,16 @@ export default function TrackerPage() {
         setJiraStory(null);
     };
 
-    const handleDeleteClick = (id: number, e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleDeleteClick = (id: number, e?: React.MouseEvent) => {
+        e?.stopPropagation();
         setPendingDeleteId(id);
+    };
+
+    const openItemMenu = (item: WorkStory, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        setItemMenuAnchor({ x: rect.right, y: rect.top, item });
+        setIsItemMenuOpen(true);
     };
 
     const startEditingStoryTitle = (item: WorkStory, e: React.MouseEvent) => {
@@ -631,7 +719,7 @@ export default function TrackerPage() {
                 {/* --- LEFT: HISTORY --- */}
                 <aside className="w-72 flex flex-col border border-border rounded-lg bg-card overflow-hidden shadow-sm">
                     <div className="flex h-8 items-center border-b border-border bg-muted/50 px-2 overflow-hidden">
-                        <div className="relative w-full">
+                        <div className="relative flex-1">
                             <Search
                                 size={14}
                                 className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -724,20 +812,10 @@ export default function TrackerPage() {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7 p-0 rounded-none border-0 bg-transparent hover:bg-secondary/70"
-                                            onClick={(e) => handleExportItem(item, e)}
-                                            title="Export"
+                                            onClick={(e) => openItemMenu(item, e)}
+                                            title="Actions"
                                         >
-                                            <Download size={12} />
-                                        </Button>
-                                        <div className="h-7 w-px bg-border" />
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 p-0 rounded-none border-0 bg-transparent text-destructive hover:bg-destructive/10"
-                                            onClick={(e) => handleDeleteClick(item.id!, e)}
-                                            title="Delete"
-                                        >
-                                            <Trash2 size={12} className="text-destructive" />
+                                            <MoreVertical size={12} />
                                         </Button>
                                     </div>
                                 </div>
@@ -949,6 +1027,77 @@ export default function TrackerPage() {
             </div>
 
             {/* --- MODALS --- */}
+            {isItemMenuOpen && itemMenuAnchor && (
+                <div
+                    className="fixed inset-0 z-[100]"
+                    onClick={() => setIsItemMenuOpen(false)}
+                    onContextMenu={(e) => { e.preventDefault(); setIsItemMenuOpen(false); }}
+                >
+                    <div
+                        className="absolute w-44 rounded-lg bg-card border border-border shadow-xl py-1 animate-in fade-in zoom-in duration-150"
+                        style={{
+                            left: Math.min(itemMenuAnchor.x + 8, window.innerWidth - 184),
+                            top: Math.min(itemMenuAnchor.y, window.innerHeight - 220)
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={(e) => { setIsItemMenuOpen(false); openSendStoryModal(itemMenuAnchor.item, e); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                            <Share2 size={14} className="text-secondary-foreground/60" />
+                            <span>Send on LAN</span>
+                        </button>
+                        <button
+                            onClick={(e) => { setIsItemMenuOpen(false); handleExportLazyShareItem(itemMenuAnchor.item, e); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                            <Share2 size={14} className="text-secondary-foreground/60" />
+                            <span>Export .lazyshare</span>
+                        </button>
+                        <button
+                            onClick={(e) => { setIsItemMenuOpen(false); void handleExportItem(itemMenuAnchor.item, e); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                            <Download size={14} className="text-secondary-foreground/60" />
+                            <span>Export Markdown</span>
+                        </button>
+                        <div className="h-px bg-border my-1" />
+                        <button
+                            onClick={(e) => { setIsItemMenuOpen(false); handleDeleteClick(itemMenuAnchor.item.id!, e); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        >
+                            <Trash2 size={14} />
+                            <span>Delete Story</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <Modal
+                isOpen={isSendModalOpen}
+                onClose={() => {
+                    setIsSendModalOpen(false);
+                    setPendingSendPacket(null);
+                }}
+                title="Send to Teammate"
+            >
+                <div className="space-y-2">
+                    {lanPeers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No LAN peers found. Open LAZY on teammate device and keep both apps on same network.</p>
+                    ) : lanPeers.map((peer) => (
+                        <button
+                            key={peer.deviceId}
+                            className="w-full rounded border border-border bg-background px-3 py-2 text-left hover:bg-secondary/60 cursor-pointer"
+                            onClick={() => void handleSendToPeer(peer.deviceId)}
+                        >
+                            <p className="text-xs font-bold text-foreground">{peer.deviceName}</p>
+                            <p className="text-[10px] font-mono text-muted-foreground">{peer.fingerprint} | Code {peer.pairingCode}</p>
+                        </button>
+                    ))}
+                </div>
+            </Modal>
+
             <Modal
                 isOpen={!!alertMessage}
                 onClose={() => setAlertMessage(null)}

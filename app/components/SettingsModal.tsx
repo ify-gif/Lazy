@@ -1,9 +1,10 @@
-import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone } from "lucide-react";
+import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useTheme } from "next-themes";
-import { UpdateEvent } from "../../main/types";
+import { LanPeer, LocalTeamProfile, TeamDevice, TeamTrustMode, TeamShareEvent, UpdateEvent } from "../../main/types";
 import Button from "./Button";
 import Input from "./Input";
+import { generatePairingCode } from "../lib/lazyshare";
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -27,6 +28,13 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [isDownloading, setIsDownloading] = useState(false);
     const [isUpdateDownloaded, setIsUpdateDownloaded] = useState(false);
     const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'uptodate' | 'error' | 'available'>('idle');
+    const [teamDevices, setTeamDevices] = useState<TeamDevice[]>([]);
+    const [newDeviceName, setNewDeviceName] = useState("");
+    const [newPairingCode, setNewPairingCode] = useState(generatePairingCode());
+    const [localProfile, setLocalProfile] = useState<LocalTeamProfile | null>(null);
+    const [localDeviceNameEdit, setLocalDeviceNameEdit] = useState("");
+    const [discoveredPeers, setDiscoveredPeers] = useState<LanPeer[]>([]);
+    const [pairStatus, setPairStatus] = useState("");
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -67,6 +75,9 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                 window.electron.settings.get("selectedMic").then((v: string) => {
                     if (v) setSelectedMic(v);
                 });
+                void loadTeamDevices();
+                void loadLocalProfile();
+                void loadDiscoveredPeers();
             } else {
                 const savedMic = localStorage.getItem("selectedMic");
                 if (savedMic) setSelectedMic(savedMic);
@@ -157,6 +168,99 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     };
 
     const [keyStatus, setKeyStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
+
+    const loadTeamDevices = async () => {
+        if (!window.electron?.db) return;
+        try {
+            const devices = await window.electron.db.getTeamDevices();
+            setTeamDevices(devices);
+        } catch (err) {
+            console.error("Failed to load team devices", err);
+        }
+    };
+
+    const loadLocalProfile = async () => {
+        if (!window.electron?.team) return;
+        try {
+            const profile = await window.electron.team.getLocalProfile();
+            setLocalProfile(profile);
+            setLocalDeviceNameEdit(profile.deviceName);
+        } catch (err) {
+            console.error("Failed to load local team profile", err);
+        }
+    };
+
+    const loadDiscoveredPeers = async () => {
+        if (!window.electron?.team) return;
+        try {
+            const peers = await window.electron.team.getPeers();
+            setDiscoveredPeers(peers);
+        } catch (err) {
+            console.error("Failed to load discovered peers", err);
+        }
+    };
+
+    const handleAddTeamDevice = async () => {
+        if (!window.electron?.db) return;
+        const trimmed = newDeviceName.trim();
+        if (!trimmed) return;
+        try {
+            await window.electron.db.saveTeamDevice(trimmed, newPairingCode);
+            setNewDeviceName("");
+            setNewPairingCode(generatePairingCode());
+            await loadTeamDevices();
+        } catch (err) {
+            console.error("Failed to save team device", err);
+        }
+    };
+
+    const handlePairDiscoveredPeer = async (peer: LanPeer) => {
+        if (!window.electron?.db) return;
+        if (teamDevices.some((device) => device.pairing_code === peer.pairingCode)) {
+            setPairStatus(`${peer.deviceName} is already in My Team.`);
+            return;
+        }
+
+        try {
+            await window.electron.db.saveTeamDevice(peer.deviceName, peer.pairingCode);
+            await loadTeamDevices();
+            setPairStatus(`Paired ${peer.deviceName}.`);
+        } catch (err) {
+            console.error("Failed to pair discovered peer", err);
+            setPairStatus(`Failed to pair ${peer.deviceName}.`);
+        }
+    };
+
+    const handleDeleteTeamDevice = async (deviceId: string) => {
+        if (!window.electron?.db) return;
+        try {
+            await window.electron.db.deleteTeamDevice(deviceId);
+            await loadTeamDevices();
+        } catch (err) {
+            console.error("Failed to delete team device", err);
+        }
+    };
+
+    const handleTrustModeChange = async (deviceId: string, trustMode: TeamTrustMode) => {
+        if (!window.electron?.db) return;
+        try {
+            await window.electron.db.updateTeamDeviceTrustMode(deviceId, trustMode);
+            await loadTeamDevices();
+        } catch (err) {
+            console.error("Failed to update trust mode", err);
+        }
+    };
+
+    const saveLocalDeviceName = async () => {
+        if (!window.electron?.team) return;
+        try {
+            const profile = await window.electron.team.setLocalDeviceName(localDeviceNameEdit);
+            setLocalProfile(profile);
+            setLocalDeviceNameEdit(profile.deviceName);
+        } catch (err) {
+            console.error("Failed to save local device name", err);
+        }
+    };
 
     const validateKey = async () => {
         if (!apiKey) return;
@@ -259,6 +363,16 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             }
         });
 
+        return () => unsubscribe();
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || !window.electron?.team) return;
+        const unsubscribe = window.electron.team.onEvent((event: TeamShareEvent) => {
+            if (event.event === 'peers-updated') {
+                void loadDiscoveredPeers();
+            }
+        });
         return () => unsubscribe();
     }, [isOpen]);
 
@@ -440,6 +554,128 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                             </div>
                         </div>
 
+                    </div>
+
+                    {/* My Team */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <Users size={14} /> My Team
+                        </div>
+                        <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                            {localProfile && (
+                                <div className="rounded border border-border bg-background/80 p-2">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">This Device</p>
+                                    <div className="mt-1 grid grid-cols-[1fr_auto] gap-2">
+                                        <Input
+                                            value={localDeviceNameEdit}
+                                            onChange={(e) => setLocalDeviceNameEdit(e.target.value)}
+                                        />
+                                        <Button variant="outline" size="sm" onClick={saveLocalDeviceName}>Save</Button>
+                                    </div>
+                                    <p className="mt-1 text-[10px] font-mono text-muted-foreground">
+                                        Code {localProfile.pairingCode} | {localProfile.fingerprint}
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="rounded border border-border bg-background/80 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Scan LAN Devices</p>
+                                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => void loadDiscoveredPeers()}>
+                                        <Wifi size={12} className="mr-1" /> Scan
+                                    </Button>
+                                </div>
+                                <div className="mt-2 max-h-28 space-y-1 overflow-y-auto">
+                                    {discoveredPeers.length === 0 ? (
+                                        <p className="text-[11px] italic text-muted-foreground">No peers discovered yet.</p>
+                                    ) : discoveredPeers.map((peer) => (
+                                        <div key={peer.deviceId} className="flex items-center justify-between gap-2 rounded border border-border bg-muted/30 px-2 py-1.5">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-[11px] font-bold text-foreground">{peer.deviceName}</p>
+                                                <p className="text-[10px] font-mono text-muted-foreground">{peer.fingerprint} | Code {peer.pairingCode}</p>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-6 px-2 text-[10px]"
+                                                onClick={() => void handlePairDiscoveredPeer(peer)}
+                                            >
+                                                <Link size={11} className="mr-1" /> Pair
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                {pairStatus && (
+                                    <p className="mt-1 text-[10px] text-muted-foreground">{pairStatus}</p>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+                                <Input
+                                    placeholder="Device name (e.g. Sarah-Laptop)"
+                                    value={newDeviceName}
+                                    onChange={(e) => setNewDeviceName(e.target.value)}
+                                />
+                                <Input
+                                    value={newPairingCode}
+                                    onChange={(e) => setNewPairingCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                    className="w-24 text-center font-mono"
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="px-2"
+                                    onClick={() => setNewPairingCode(generatePairingCode())}
+                                    title="Regenerate pairing code"
+                                >
+                                    <RefreshCw size={12} />
+                                </Button>
+                            </div>
+                            <Button
+                                onClick={handleAddTeamDevice}
+                                disabled={!newDeviceName.trim() || newPairingCode.length !== 6}
+                                className="w-full"
+                                size="sm"
+                            >
+                                <Plus size={12} className="mr-1" /> Save Team Device
+                            </Button>
+                            <div className="max-h-44 space-y-2 overflow-y-auto">
+                                {teamDevices.length === 0 ? (
+                                    <p className="text-[11px] italic text-muted-foreground">No paired devices yet.</p>
+                                ) : teamDevices.map((device) => (
+                                    <div key={device.device_id} className="rounded border border-border bg-background/80 p-2">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-xs font-bold text-foreground">{device.device_name}</p>
+                                                <p className="text-[10px] font-mono text-muted-foreground">
+                                                    {device.fingerprint} | Code {device.pairing_code}
+                                                </p>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                                onClick={() => void handleDeleteTeamDevice(device.device_id)}
+                                                title="Remove device"
+                                            >
+                                                <Trash2 size={12} />
+                                            </Button>
+                                        </div>
+                                        <div className="mt-2">
+                                            <select
+                                                value={device.trust_mode}
+                                                onChange={(e) => void handleTrustModeChange(device.device_id, e.target.value as TeamTrustMode)}
+                                                className="h-7 w-full rounded border border-border bg-background px-2 text-[11px] text-foreground"
+                                            >
+                                                <option value="trusted">Trusted (Auto-accept)</option>
+                                                <option value="ask">Ask Every Time</option>
+                                                <option value="blocked">Blocked</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
                 </div>

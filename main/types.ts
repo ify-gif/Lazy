@@ -47,3 +47,47 @@ export interface UpdateEvent {
 }
 
 export type MeetingTemplate = 'standard' | 'standup' | 'action_items' | 'decision_log';
+
+export type TeamTrustMode = 'trusted' | 'ask' | 'blocked';
+
+export interface TeamDevice {
+    id: number;
+    device_id: string;
+    device_name: string;
+    pairing_code: string;
+    fingerprint: string;
+    trust_mode: TeamTrustMode;
+    last_seen_at?: string | null;
+    created_at?: string;
+}
+
+export interface LocalTeamProfile {
+    deviceId: string;
+    deviceName: string;
+    pairingCode: string;
+    fingerprint: string;
+}
+
+export interface LanPeer {
+    deviceId: string;
+    deviceName: string;
+    pairingCode: string;
+    fingerprint: string;
+    address: string;
+    port: number;
+    lastSeenAt: number;
+}
+
+export interface TeamSharePacket {
+    version: 1;
+    kind: 'meeting' | 'story';
+    shared_at: string;
+    source_device?: string;
+    pairing_code?: string;
+    payload: Record<string, unknown>;
+}
+
+export interface TeamShareEvent {
+    event: 'peers-updated' | 'share-imported' | 'share-rejected' | 'share-error';
+    data?: unknown;
+}

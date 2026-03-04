@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, ChevronRight, ChevronDown, Folder, Save, Copy, Download, Trash2, Mic, ListChecks, ArrowRight, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { MoreVertical, ChevronRight, ChevronDown, Folder, Save, Copy, Download, Trash2, Mic, ListChecks, ArrowRight, CheckCircle2, XCircle, Loader2, Share2 } from "lucide-react";
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
-import type { Meeting, ActionItem, Thread, MeetingTemplate } from "../../main/types";
+import type { Meeting, ActionItem, Thread, MeetingTemplate, LanPeer, TeamSharePacket, TeamShareEvent } from "../../main/types";
+import { downloadLazyShareFile } from "../lib/lazyshare";
 
 type ActionItemStatus = 'idle' | 'pushing' | 'pushed' | 'failed';
 
@@ -25,11 +26,9 @@ interface HistoryItemProps {
     item: Meeting;
     isSelected: boolean;
     onSelect: () => void;
-    onExport: (e: React.MouseEvent) => void;
-    onDelete: (e: React.MouseEvent) => void;
 }
 
-const HistoryItem = ({ item, isSelected, onSelect, onExport, onDelete, onMenuOpen }: HistoryItemProps & { onMenuOpen: (item: Meeting, e: React.MouseEvent) => void }) => (
+const HistoryItem = ({ item, isSelected, onSelect, onMenuOpen }: HistoryItemProps & { onMenuOpen: (item: Meeting, e: React.MouseEvent) => void }) => (
     <div
         onClick={onSelect}
         className={`group flex items-center justify-between p-1.5 rounded-md cursor-pointer transition-all border ${isSelected
@@ -78,6 +77,9 @@ export default function MeetingPage() {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
     const [pendingDeleteThreadId, setPendingDeleteThreadId] = useState<number | null>(null);
+    const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+    const [lanPeers, setLanPeers] = useState<LanPeer[]>([]);
+    const [pendingSendPacket, setPendingSendPacket] = useState<TeamSharePacket | null>(null);
 
     // Action Items state
     const [actionItems, setActionItems] = useState<ActionItemUI[]>([]);
@@ -123,9 +125,20 @@ export default function MeetingPage() {
         }
     };
 
+    const loadLanPeers = async () => {
+        if (!window.electron?.team) return;
+        try {
+            const peers = await window.electron.team.getPeers();
+            setLanPeers(peers);
+        } catch (err) {
+            console.error("Failed to load LAN peers", err);
+        }
+    };
+
     useEffect(() => {
         loadHistory();
         loadThreads();
+        loadLanPeers();
 
         const handleClickOutside = (event: MouseEvent) => {
             if (threadDropdownRef.current && !threadDropdownRef.current.contains(event.target as Node)) {
@@ -138,6 +151,20 @@ export default function MeetingPage() {
 
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        if (!window.electron?.team) return;
+        const unsubscribe = window.electron.team.onEvent((event: TeamShareEvent) => {
+            if (event.event === 'peers-updated') {
+                void loadLanPeers();
+            }
+            if (event.event === 'share-imported') {
+                void loadHistory();
+                setAlertMessage("Received shared item from teammate.");
+            }
+        });
+        return unsubscribe;
     }, []);
 
     const toggleThread = (threadId: number) => {
@@ -480,6 +507,55 @@ export default function MeetingPage() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    };
+
+    const handleExportLazyShare = (item: Meeting, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (!item.summary && !item.transcript) return;
+        downloadLazyShareFile(
+            {
+                version: 1,
+                kind: 'meeting',
+                shared_at: new Date().toISOString(),
+                payload: {
+                    title: item.title || DEFAULT_MEETING_TITLE,
+                    transcript: item.transcript || "",
+                    summary: item.summary || "",
+                    created_at: item.created_at || new Date().toISOString(),
+                },
+            },
+            item.title || "meeting-share"
+        );
+    };
+
+    const openSendMeetingModal = (item: Meeting, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        setPendingSendPacket({
+            version: 1,
+            kind: 'meeting',
+            shared_at: new Date().toISOString(),
+            payload: {
+                title: item.title || DEFAULT_MEETING_TITLE,
+                transcript: item.transcript || "",
+                summary: item.summary || "",
+                created_at: item.created_at || new Date().toISOString(),
+            },
+        });
+        setIsSendModalOpen(true);
+        void loadLanPeers();
+    };
+
+    const handleSendToPeer = async (peerDeviceId: string) => {
+        if (!window.electron?.team || !pendingSendPacket) return;
+        try {
+            await window.electron.team.sendShare(peerDeviceId, pendingSendPacket);
+            setIsSendModalOpen(false);
+            setPendingSendPacket(null);
+            setAlertMessage("Meeting sent over LAN.");
+        } catch (err) {
+            console.error("Failed to send LAN meeting", err);
+            setAlertMessage("Could not send to selected teammate.");
+        }
     };
 
     const hasValidMeetingTitle = () => {
@@ -896,8 +972,6 @@ export default function MeetingPage() {
                                                                         isSelected={selectedMeetingId === item.id}
                                                                         onSelect={() => handleSelectMeeting(item)}
                                                                         onMenuOpen={handleMenuOpen}
-                                                                        onExport={(e) => handleExportItem(item, e)}
-                                                                        onDelete={(e) => handleDeleteClick(item.id!, e)}
                                                                     />
                                                                 ))}
                                                             </div>
@@ -921,8 +995,6 @@ export default function MeetingPage() {
                                                         item={item}
                                                         isSelected={selectedMeetingId === item.id}
                                                         onSelect={() => handleSelectMeeting(item)}
-                                                        onExport={(e) => handleExportItem(item, e)}
-                                                        onDelete={(e) => handleDeleteClick(item.id!, e)}
                                                         onMenuOpen={handleMenuOpen}
                                                     />
                                                 ))}
@@ -1274,6 +1346,30 @@ export default function MeetingPage() {
                 <p className="py-2 text-sm text-muted-foreground">Permanently delete this meeting session? This cannot be undone.</p>
             </Modal>
 
+            <Modal
+                isOpen={isSendModalOpen}
+                onClose={() => {
+                    setIsSendModalOpen(false);
+                    setPendingSendPacket(null);
+                }}
+                title="Send to Teammate"
+            >
+                <div className="space-y-2">
+                    {lanPeers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No LAN peers found. Open LAZY on teammate device and keep both apps on same network.</p>
+                    ) : lanPeers.map((peer) => (
+                        <button
+                            key={peer.deviceId}
+                            className="w-full rounded border border-border bg-background px-3 py-2 text-left hover:bg-secondary/60 cursor-pointer"
+                            onClick={() => void handleSendToPeer(peer.deviceId)}
+                        >
+                            <p className="text-xs font-bold text-foreground">{peer.deviceName}</p>
+                            <p className="text-[10px] font-mono text-muted-foreground">{peer.fingerprint} | Code {peer.pairingCode}</p>
+                        </button>
+                    ))}
+                </div>
+            </Modal>
+
             {/* --- CONTEXT MENU --- */}
             {isMenuOpen && menuAnchor && (
                 <div
@@ -1336,11 +1432,27 @@ export default function MeetingPage() {
                         <div className="h-px bg-border my-1" />
 
                         <button
+                            onClick={(e) => { setIsMenuOpen(false); openSendMeetingModal(menuAnchor.item, e); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                            <Share2 size={14} className="text-secondary-foreground/60" />
+                            <span>Send on LAN</span>
+                        </button>
+
+                        <button
                             onClick={(e) => { setIsMenuOpen(false); handleExportItem(menuAnchor.item, e); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
                         >
                             <Download size={14} className="text-secondary-foreground/60" />
                             <span>Export Markdown</span>
+                        </button>
+
+                        <button
+                            onClick={(e) => { setIsMenuOpen(false); handleExportLazyShare(menuAnchor.item, e); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                            <Share2 size={14} className="text-secondary-foreground/60" />
+                            <span>Export .lazyshare</span>
                         </button>
 
                         <button

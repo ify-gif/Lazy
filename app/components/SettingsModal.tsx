@@ -35,6 +35,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [localDeviceNameEdit, setLocalDeviceNameEdit] = useState("");
     const [discoveredPeers, setDiscoveredPeers] = useState<LanPeer[]>([]);
     const [pairStatus, setPairStatus] = useState("");
+    const [isScanningPeers, setIsScanningPeers] = useState(false);
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -197,6 +198,22 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             setDiscoveredPeers(peers);
         } catch (err) {
             console.error("Failed to load discovered peers", err);
+        }
+    };
+
+    const handleScanPeers = async () => {
+        if (!window.electron?.team) return;
+        try {
+            setIsScanningPeers(true);
+            setPairStatus("Scanning LAN devices...");
+            const peers = await window.electron.team.scanPeers();
+            setDiscoveredPeers(peers);
+            setPairStatus(peers.length > 0 ? `Found ${peers.length} device(s).` : "No peers discovered yet.");
+        } catch (err) {
+            console.error("Failed to scan peers", err);
+            setPairStatus("Scan failed.");
+        } finally {
+            setIsScanningPeers(false);
         }
     };
 
@@ -581,8 +598,14 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                             <div className="rounded border border-border bg-background/80 p-2">
                                 <div className="flex items-center justify-between gap-2">
                                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Scan LAN Devices</p>
-                                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => void loadDiscoveredPeers()}>
-                                        <Wifi size={12} className="mr-1" /> Scan
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-2"
+                                        onClick={() => void handleScanPeers()}
+                                        disabled={isScanningPeers}
+                                    >
+                                        <Wifi size={12} className="mr-1" /> {isScanningPeers ? "Scanning..." : "Scan"}
                                     </Button>
                                 </div>
                                 <div className="mt-2 max-h-28 space-y-1 overflow-y-auto">

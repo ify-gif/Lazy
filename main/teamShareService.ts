@@ -120,6 +120,15 @@ export const TeamShareService = {
         });
     },
 
+    async scanPeers(): Promise<LanPeer[]> {
+        this.broadcastPresence();
+        await this.delay(900);
+        this.broadcastPresence();
+        await this.delay(900);
+        this.prunePeers();
+        return this.getPeers();
+    },
+
     getOrCreateLocalProfile(): LocalTeamProfile {
         const savedDeviceId = Store.get('localDeviceId');
         const savedDeviceName = Store.get('localDeviceName');
@@ -305,5 +314,9 @@ export const TeamShareService = {
         BrowserWindow.getAllWindows().forEach((win) => {
             win.webContents.send('team-share-event', event);
         });
+    },
+
+    delay(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
     },
 };

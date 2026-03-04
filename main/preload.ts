@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('electron', {
         getLocalProfile: (): Promise<LocalTeamProfile> => ipcRenderer.invoke('team-get-local-profile'),
         setLocalDeviceName: (name: string): Promise<LocalTeamProfile> => ipcRenderer.invoke('team-set-local-device-name', name),
         getPeers: (): Promise<LanPeer[]> => ipcRenderer.invoke('team-get-peers'),
+        scanPeers: (): Promise<LanPeer[]> => ipcRenderer.invoke('team-scan-peers'),
         sendShare: (peerDeviceId: string, packet: TeamSharePacket): Promise<void> =>
             ipcRenderer.invoke('team-send-share', { peerDeviceId, packet }),
         onEvent: (callback: (event: TeamShareEvent) => void) => {

@@ -409,6 +409,10 @@ ipcMain.handle('team-get-peers', () => {
     return TeamShareService.getPeers();
 });
 
+ipcMain.handle('team-scan-peers', async () => {
+    return await TeamShareService.scanPeers();
+});
+
 ipcMain.handle('team-send-share', async (_event, { peerDeviceId, packet }) => {
     return await TeamShareService.sendShare(peerDeviceId, packet);
 });

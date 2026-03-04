@@ -53,6 +53,7 @@ declare global {
                 getLocalProfile: () => Promise<LocalTeamProfile>;
                 setLocalDeviceName: (name: string) => Promise<LocalTeamProfile>;
                 getPeers: () => Promise<LanPeer[]>;
+                scanPeers: () => Promise<LanPeer[]>;
                 sendShare: (peerDeviceId: string, packet: TeamSharePacket) => Promise<void>;
                 onEvent: (callback: (event: TeamShareEvent) => void) => () => void;
             };

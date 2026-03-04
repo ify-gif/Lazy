@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'crypto';
 import { BrowserWindow } from 'electron';
 import { Store } from './store';
 import { DBService } from './dbService';
-import { LanPeer, LocalTeamProfile, TeamShareEvent, TeamSharePacket } from './types';
+import { LanPeer, LocalTeamProfile, TeamDiagnostics, TeamShareEvent, TeamSharePacket } from './types';
 
 const DISCOVERY_PORT = 41234;
 const BROADCAST_HOST = '255.255.255.255';
@@ -45,6 +45,8 @@ export const TeamShareService = {
     profile: null as LocalTeamProfile | null,
     listeningPort: 0,
     started: false,
+    discoveryBound: false,
+    lastBroadcastAt: 0,
 
     async start(): Promise<void> {
         if (this.started) return;
@@ -67,6 +69,8 @@ export const TeamShareService = {
         this.tcpServer?.close();
         this.discoverySocket = null;
         this.tcpServer = null;
+        this.discoveryBound = false;
+        this.lastBroadcastAt = 0;
         this.peers.clear();
         this.started = false;
     },
@@ -127,6 +131,18 @@ export const TeamShareService = {
         await this.delay(900);
         this.prunePeers();
         return this.getPeers();
+    },
+
+    getDiagnostics(): TeamDiagnostics {
+        return {
+            discoveryBound: this.discoveryBound,
+            discoveryPort: DISCOVERY_PORT,
+            tcpListening: this.listeningPort > 0,
+            tcpPort: this.listeningPort,
+            lastBroadcastAt: this.lastBroadcastAt || undefined,
+            peerCount: this.peers.size,
+            profileReady: !!this.profile,
+        };
     },
 
     getOrCreateLocalProfile(): LocalTeamProfile {
@@ -207,6 +223,7 @@ export const TeamShareService = {
         });
         this.discoverySocket.bind(DISCOVERY_PORT, '0.0.0.0', () => {
             this.discoverySocket?.setBroadcast(true);
+            this.discoveryBound = true;
         });
     },
 
@@ -225,6 +242,7 @@ export const TeamShareService = {
         };
         const data = Buffer.from(JSON.stringify(payload), 'utf8');
         this.discoverySocket.send(data, DISCOVERY_PORT, BROADCAST_HOST);
+        this.lastBroadcastAt = Date.now();
     },
 
     handleDiscoveryMessage(msg: Buffer, remoteAddress: string): void {

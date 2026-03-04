@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent } from './types';
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent, TeamDiagnostics } from './types';
 
 contextBridge.exposeInMainWorld('electron', {
     windowControls: {
@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electron', {
         setLocalDeviceName: (name: string): Promise<LocalTeamProfile> => ipcRenderer.invoke('team-set-local-device-name', name),
         getPeers: (): Promise<LanPeer[]> => ipcRenderer.invoke('team-get-peers'),
         scanPeers: (): Promise<LanPeer[]> => ipcRenderer.invoke('team-scan-peers'),
+        getDiagnostics: (): Promise<TeamDiagnostics> => ipcRenderer.invoke('team-get-diagnostics'),
         sendShare: (peerDeviceId: string, packet: TeamSharePacket): Promise<void> =>
             ipcRenderer.invoke('team-send-share', { peerDeviceId, packet }),
         onEvent: (callback: (event: TeamShareEvent) => void) => {

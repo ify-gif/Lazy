@@ -1,7 +1,7 @@
 import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useTheme } from "next-themes";
-import { LanPeer, LocalTeamProfile, TeamDevice, TeamTrustMode, TeamShareEvent, UpdateEvent } from "../../main/types";
+import { LanPeer, LocalTeamProfile, TeamDevice, TeamDiagnostics, TeamTrustMode, TeamShareEvent, UpdateEvent } from "../../main/types";
 import Button from "./Button";
 import Input from "./Input";
 import { generatePairingCode } from "../lib/lazyshare";
@@ -36,6 +36,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [discoveredPeers, setDiscoveredPeers] = useState<LanPeer[]>([]);
     const [pairStatus, setPairStatus] = useState("");
     const [isScanningPeers, setIsScanningPeers] = useState(false);
+    const [teamDiagnostics, setTeamDiagnostics] = useState<TeamDiagnostics | null>(null);
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -79,6 +80,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                 void loadTeamDevices();
                 void loadLocalProfile();
                 void loadDiscoveredPeers();
+                void loadDiagnostics();
             } else {
                 const savedMic = localStorage.getItem("selectedMic");
                 if (savedMic) setSelectedMic(savedMic);
@@ -201,6 +203,16 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
         }
     };
 
+    const loadDiagnostics = async () => {
+        if (!window.electron?.team) return;
+        try {
+            const diagnostics = await window.electron.team.getDiagnostics();
+            setTeamDiagnostics(diagnostics);
+        } catch (err) {
+            console.error("Failed to load team diagnostics", err);
+        }
+    };
+
     const handleScanPeers = async () => {
         if (!window.electron?.team) return;
         try {
@@ -215,9 +227,11 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             setDiscoveredPeers(peers);
             if (!teamApi.scanPeers) {
                 setPairStatus("Scan API unavailable in this running build. Restart/update app, then scan again.");
+                await loadDiagnostics();
                 return;
             }
             setPairStatus(peers.length > 0 ? `Found ${peers.length} device(s).` : "No peers discovered yet.");
+            await loadDiagnostics();
         } catch (err) {
             console.error("Failed to scan peers", err);
             setPairStatus("Scan failed.");
@@ -397,6 +411,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
         const unsubscribe = window.electron.team.onEvent((event: TeamShareEvent) => {
             if (event.event === 'peers-updated') {
                 void loadDiscoveredPeers();
+                void loadDiagnostics();
             }
         });
         return () => unsubscribe();
@@ -639,6 +654,29 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                 </div>
                                 {pairStatus && (
                                     <p className="mt-1 text-[10px] text-muted-foreground">{pairStatus}</p>
+                                )}
+                            </div>
+
+                            <div className="rounded border border-border bg-background/80 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">LAN Diagnostics</p>
+                                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => void loadDiagnostics()}>
+                                        <RefreshCw size={12} className="mr-1" /> Refresh
+                                    </Button>
+                                </div>
+                                {!teamDiagnostics ? (
+                                    <p className="mt-2 text-[11px] italic text-muted-foreground">Diagnostics unavailable.</p>
+                                ) : (
+                                    <div className="mt-2 grid grid-cols-2 gap-1 text-[10px] font-mono text-muted-foreground">
+                                        <span>UDP bound:</span><span>{teamDiagnostics.discoveryBound ? "yes" : "no"}</span>
+                                        <span>UDP port:</span><span>{teamDiagnostics.discoveryPort}</span>
+                                        <span>TCP listening:</span><span>{teamDiagnostics.tcpListening ? "yes" : "no"}</span>
+                                        <span>TCP port:</span><span>{teamDiagnostics.tcpPort || "-"}</span>
+                                        <span>Peers seen:</span><span>{teamDiagnostics.peerCount}</span>
+                                        <span>Profile ready:</span><span>{teamDiagnostics.profileReady ? "yes" : "no"}</span>
+                                        <span>Last broadcast:</span>
+                                        <span>{teamDiagnostics.lastBroadcastAt ? new Date(teamDiagnostics.lastBroadcastAt).toLocaleTimeString() : "-"}</span>
+                                    </div>
                                 )}
                             </div>
 

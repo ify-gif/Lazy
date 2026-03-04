@@ -1,4 +1,4 @@
-import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent } from './main/types';
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent, TeamDiagnostics } from './main/types';
 declare global {
     interface Window {
         electron: {
@@ -54,6 +54,7 @@ declare global {
                 setLocalDeviceName: (name: string) => Promise<LocalTeamProfile>;
                 getPeers: () => Promise<LanPeer[]>;
                 scanPeers: () => Promise<LanPeer[]>;
+                getDiagnostics: () => Promise<TeamDiagnostics>;
                 sendShare: (peerDeviceId: string, packet: TeamSharePacket) => Promise<void>;
                 onEvent: (callback: (event: TeamShareEvent) => void) => () => void;
             };

@@ -91,3 +91,13 @@ export interface TeamShareEvent {
     event: 'peers-updated' | 'share-imported' | 'share-rejected' | 'share-error';
     data?: unknown;
 }
+
+export interface TeamDiagnostics {
+    discoveryBound: boolean;
+    discoveryPort: number;
+    tcpListening: boolean;
+    tcpPort: number;
+    lastBroadcastAt?: number;
+    peerCount: number;
+    profileReady: boolean;
+}

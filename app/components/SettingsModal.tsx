@@ -1,4 +1,4 @@
-import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link } from "lucide-react";
+import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link, Info } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useTheme } from "next-themes";
 import { LanPeer, LocalTeamProfile, TeamDevice, TeamDiagnostics, TeamTrustMode, TeamShareEvent, UpdateEvent } from "../../main/types";
@@ -38,6 +38,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [isScanningPeers, setIsScanningPeers] = useState(false);
     const [teamDiagnostics, setTeamDiagnostics] = useState<TeamDiagnostics | null>(null);
     const [pairStatusTone, setPairStatusTone] = useState<'neutral' | 'success' | 'error'>('neutral');
+    const [isLanInfoOpen, setIsLanInfoOpen] = useState(false);
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -436,6 +437,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     if (!isOpen) return null;
 
     return (
+        <>
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="w-[620px] max-w-[94vw] bg-card border border-border rounded-lg shadow-xl animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden">
 
@@ -686,7 +688,16 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
 
                             <div className="rounded border border-border bg-background/80 p-2">
                                 <div className="flex items-center justify-between gap-2">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">LAN Diagnostics</p>
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">LAN Diagnostics</p>
+                                        <button
+                                            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary cursor-pointer"
+                                            title="LAN sharing help"
+                                            onClick={() => setIsLanInfoOpen(true)}
+                                        >
+                                            <Info size={12} />
+                                        </button>
+                                    </div>
                                     <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => void loadDiagnostics()}>
                                         <RefreshCw size={12} className="mr-1" /> Refresh
                                     </Button>
@@ -698,6 +709,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         <span>UDP bound:</span><span>{teamDiagnostics.discoveryBound ? "yes" : "no"}</span>
                                         <span>UDP port:</span><span>{teamDiagnostics.discoveryPort}</span>
                                         <span>UDP error:</span><span className={teamDiagnostics.discoveryError ? "text-red-600 dark:text-red-400" : ""}>{teamDiagnostics.discoveryError || "-"}</span>
+                                        <span>Broadcast paths:</span><span>{teamDiagnostics.broadcastTargets?.length ?? 0}</span>
                                         <span>TCP listening:</span><span>{teamDiagnostics.tcpListening ? "yes" : "no"}</span>
                                         <span>TCP port:</span><span>{teamDiagnostics.tcpPort || "-"}</span>
                                         <span>Peers seen:</span><span>{teamDiagnostics.peerCount}</span>
@@ -787,5 +799,26 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
 
             </div>
         </div>
+        {isLanInfoOpen && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40">
+                <div className="w-[360px] max-w-[92vw] rounded-lg border border-border bg-card shadow-xl">
+                    <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                        <h3 className="text-sm font-bold text-foreground">LAN Sharing Help</h3>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsLanInfoOpen(false)}>
+                            <X size={16} />
+                        </Button>
+                    </div>
+                    <div className="space-y-2 px-4 py-3 text-xs text-muted-foreground">
+                        <p>Make sure both devices are on the same local network and LAZY is open on both.</p>
+                        <p>Allow LAZY through your firewall on private networks so device discovery can work.</p>
+                        <p>If no devices appear, click Scan again and restart both apps before retrying.</p>
+                    </div>
+                    <div className="flex justify-end border-t border-border px-4 py-2">
+                        <Button variant="secondary" size="sm" onClick={() => setIsLanInfoOpen(false)}>Close</Button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 }

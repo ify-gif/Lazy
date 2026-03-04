@@ -48,6 +48,7 @@ export const TeamShareService = {
     discoveryBound: false,
     lastBroadcastAt: 0,
     discoveryError: '',
+    lastBroadcastTargets: [] as string[],
 
     async start(): Promise<void> {
         if (this.started) return;
@@ -73,6 +74,7 @@ export const TeamShareService = {
         this.discoveryBound = false;
         this.lastBroadcastAt = 0;
         this.discoveryError = '';
+        this.lastBroadcastTargets = [];
         this.peers.clear();
         this.started = false;
     },
@@ -144,6 +146,7 @@ export const TeamShareService = {
             discoveryBound: this.discoveryBound,
             discoveryPort: DISCOVERY_PORT,
             discoveryError: this.discoveryError || undefined,
+            broadcastTargets: this.lastBroadcastTargets.length > 0 ? this.lastBroadcastTargets : undefined,
             tcpListening: this.listeningPort > 0,
             tcpPort: this.listeningPort,
             lastBroadcastAt: this.lastBroadcastAt || undefined,
@@ -258,8 +261,42 @@ export const TeamShareService = {
             port: this.listeningPort,
         };
         const data = Buffer.from(JSON.stringify(payload), 'utf8');
-        this.discoverySocket.send(data, DISCOVERY_PORT, BROADCAST_HOST);
+        const targets = this.getBroadcastTargets();
+        this.lastBroadcastTargets = targets;
+        for (const host of targets) {
+            this.discoverySocket.send(data, DISCOVERY_PORT, host);
+        }
         this.lastBroadcastAt = Date.now();
+    },
+
+    getBroadcastTargets(): string[] {
+        const targets = new Set<string>();
+        targets.add(BROADCAST_HOST);
+
+        const interfaces = os.networkInterfaces();
+        for (const infos of Object.values(interfaces)) {
+            if (!infos) continue;
+            for (const info of infos) {
+                if (info.family !== 'IPv4' || info.internal) continue;
+                const broadcast = this.computeBroadcastAddress(info.address, info.netmask);
+                if (broadcast) targets.add(broadcast);
+            }
+        }
+
+        return Array.from(targets);
+    },
+
+    computeBroadcastAddress(ip: string, netmask: string): string | null {
+        const ipOctets = ip.split('.').map((part) => Number(part));
+        const maskOctets = netmask.split('.').map((part) => Number(part));
+        if (ipOctets.length !== 4 || maskOctets.length !== 4) return null;
+        if (ipOctets.some((n) => Number.isNaN(n)) || maskOctets.some((n) => Number.isNaN(n))) return null;
+
+        const out: number[] = [];
+        for (let i = 0; i < 4; i += 1) {
+            out.push((ipOctets[i] & maskOctets[i]) | (~maskOctets[i] & 255));
+        }
+        return out.join('.');
     },
 
     handleDiscoveryMessage(msg: Buffer, remoteAddress: string): void {

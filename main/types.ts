@@ -96,6 +96,7 @@ export interface TeamDiagnostics {
     discoveryBound: boolean;
     discoveryPort: number;
     discoveryError?: string;
+    broadcastTargets?: string[];
     tcpListening: boolean;
     tcpPort: number;
     lastBroadcastAt?: number;

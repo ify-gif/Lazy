@@ -117,6 +117,12 @@ export default function MeetingPage() {
         try {
             const data = await window.electron.db.getMeetings();
             setHistoryItems(data);
+            if (selectedMeetingId) {
+                const current = data.find((m) => m.id === selectedMeetingId);
+                if (current && current.pushed_at) {
+                    setOpmPushState({ status: 'pushed', message: `Pushed at ${new Date(current.pushed_at).toLocaleTimeString()}` });
+                }
+            }
         } catch (err) {
             console.error("Failed to load meeting history", err);
         }
@@ -229,10 +235,11 @@ export default function MeetingPage() {
         if (window.electron?.opm) {
             const unsub = window.electron.opm.onStatusChange((status) => {
                 setOpmStatus(status);
+                void loadHistory();
             });
             return () => unsub();
         }
-    }, []);
+    }, [selectedMeetingId]);
 
     const handleSelectMeeting = async (item: Meeting) => {
         setTitle(item.title);

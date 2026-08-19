@@ -423,16 +423,14 @@ test("Pushing a meeting preserves explicit occurred_at and leaves stored occurre
   Store.setOPMToken("mock-access-token-xyz");
   Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
 
-  await OPMBridgeService.pushMeeting(meeting.id, "p-1");
-
-  const pending = await DBService.getPendingOutboundQueue();
-  assert.equal(pending.length, 1);
-  const payload = JSON.parse(pending[0].payload);
-  assert.equal(payload.occurred_at, explicitOccurredDate);
+  const res = await OPMBridgeService.pushMeeting(meeting.id, "p-1");
+  assert.equal(res.pushed, true);
+  assert.equal(res.queued, false);
 
   const updatedMeetings = await DBService.getMeetings();
   const updatedMeeting = updatedMeetings.find((m) => m.id === meeting.id);
   assert.equal(updatedMeeting.occurred_at, explicitOccurredDate);
+  assert.ok(updatedMeeting.pushed_at);
 });
 
 test("409 Conflict response is treated as success and removes queue item", async () => {

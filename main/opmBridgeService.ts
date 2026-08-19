@@ -443,10 +443,15 @@ export const OPMBridgeService = {
         await DBService.enqueueOutbound(idempotencyKey, '/api/bridge/meetings', JSON.stringify(pushPayload));
 
         // Immediately attempt queue drain
-        void this.drainQueue();
+        await this.drainQueue();
         this.broadcastStatus();
 
-        return { queued: true, pushed: false };
+        // Check if meeting was successfully pushed
+        const updatedMeetings = await DBService.getMeetings();
+        const updatedMeeting = updatedMeetings.find((m) => m.id === meeting.id);
+        const isPushed = !!(updatedMeeting && updatedMeeting.pushed_at);
+
+        return { queued: !isPushed, pushed: isPushed };
     },
 
     // --- OUTBOUND QUEUE DRAIN LOOP ---

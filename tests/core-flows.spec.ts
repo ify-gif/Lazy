@@ -79,6 +79,7 @@ async function installElectronMock(page: Page) {
                     setBaseUrl: (url: string) => Promise<string>;
                     onStatusChange: (cb: (data: unknown) => void) => () => void;
                 };
+                openExternal: (url: string) => Promise<void>;
                 platform: string;
             };
         }).electron = {

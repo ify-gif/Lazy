@@ -64,6 +64,7 @@ declare global {
             opm: {
                 startPairing: () => Promise<OPMPairingState>;
                 cancelPairing: () => Promise<void>;
+                expirePairing: () => Promise<void>;
                 getStatus: () => Promise<OPMBridgeStatus>;
                 disconnect: () => Promise<void>;
                 fetchSchema: () => Promise<OPMSchema>;

@@ -66,7 +66,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             setRemainingSeconds(diff);
             if (diff <= 0) {
                 if (window.electron?.opm) {
-                    void window.electron.opm.cancelPairing();
+                    void window.electron.opm.expirePairing();
                 }
             }
         };
@@ -876,7 +876,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         </Button>
                                     </div>
                                 </div>
-                            ) : remainingSeconds === 0 || opmStatus?.error?.toLowerCase().includes('expired') ? (
+                            ) : opmStatus?.error?.toLowerCase().includes('expired') ? (
                                 <div className="space-y-3 pt-2 border-t border-border/50 text-xs">
                                     <div className="bg-amber-500/10 border border-amber-500/20 rounded p-3 text-center space-y-2">
                                         <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center justify-center gap-1">

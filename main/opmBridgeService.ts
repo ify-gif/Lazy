@@ -189,9 +189,7 @@ export const OPMBridgeService = {
         }
 
         if (Date.now() >= this.pairingState.expires_at) {
-            this.cancelPairing();
-            this.lastError = 'Pairing code expired. Please start pairing again.';
-            this.broadcastStatus();
+            this.expirePairing();
             return;
         }
 
@@ -236,9 +234,7 @@ export const OPMBridgeService = {
                 this.pairingState.interval = newInterval;
                 this.schedulePollToken(deviceCode, newInterval);
             } else if (errorCode === 'expired_token') {
-                this.cancelPairing();
-                this.lastError = 'Pairing code expired. Please restart pairing.';
-                this.broadcastStatus();
+                this.expirePairing();
             } else if (errorCode === 'access_denied') {
                 this.cancelPairing();
                 this.lastError = 'Access denied by user.';
@@ -256,6 +252,20 @@ export const OPMBridgeService = {
         if (this.pairingTimer) clearTimeout(this.pairingTimer);
         this.pairingTimer = null;
         this.pairingState = null;
+        this.lastError = null;
+        this.broadcastStatus();
+    },
+
+    /**
+     * The code ran out of time. Distinct from cancelPairing(), which is a person
+     * pressing Cancel and is not an error -- this one has to leave a reason behind,
+     * because the settings card has nothing else to tell the user with.
+     */
+    expirePairing(): void {
+        if (this.pairingTimer) clearTimeout(this.pairingTimer);
+        this.pairingTimer = null;
+        this.pairingState = null;
+        this.lastError = 'Pairing code expired. Please start pairing again.';
         this.broadcastStatus();
     },
 

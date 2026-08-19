@@ -583,6 +583,34 @@ test("OPM pollToken cancels pairing and sets denied error when server returns ac
   assert.ok(status.error && status.error.toLowerCase().includes("denied"));
 });
 
+test("expirePairing leaves error message while cancelPairing does not", async () => {
+  OPMBridgeService.pairingState = {
+    device_code: "test-code-123",
+    user_code: "TEST-1234",
+    verification_uri: "http://localhost/verify",
+    interval: 5,
+    expires_in: 600,
+    expires_at: Date.now() + 600000,
+  };
+  OPMBridgeService.pairingTimer = setTimeout(() => {}, 60000);
+
+  // expirePairing must set expired error
+  OPMBridgeService.expirePairing();
+  assert.equal(OPMBridgeService.pairingTimer, null);
+  assert.equal(OPMBridgeService.pairingState, null);
+  let status = await OPMBridgeService.getStatus();
+  assert.equal(status.pairing, false);
+  assert.ok(status.error && status.error.toLowerCase().includes("expired"));
+
+  // cancelPairing must NOT leave an error (user cancelled intentionally)
+  OPMBridgeService.cancelPairing();
+  assert.equal(OPMBridgeService.pairingState, null);
+  status = await OPMBridgeService.getStatus();
+  assert.equal(status.pairing, false);
+  assert.equal(status.error, null);
+});
+
+
 test.after(async () => {
   if (mockServer) {
     mockServer.close();

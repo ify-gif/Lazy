@@ -502,6 +502,10 @@ ipcMain.handle('opm-cancel-pairing', () => {
     OPMBridgeService.cancelPairing();
 });
 
+ipcMain.handle('opm-expire-pairing', () => {
+    OPMBridgeService.expirePairing();
+});
+
 ipcMain.handle('opm-get-status', async () => {
     return await OPMBridgeService.getStatus();
 });

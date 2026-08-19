@@ -72,6 +72,7 @@ async function installElectronMock(page: Page) {
                 opm: {
                     startPairing: () => Promise<unknown>;
                     cancelPairing: () => Promise<void>;
+                    expirePairing: () => Promise<void>;
                     getStatus: () => Promise<unknown>;
                     disconnect: () => Promise<void>;
                     fetchSchema: () => Promise<unknown>;
@@ -160,6 +161,7 @@ async function installElectronMock(page: Page) {
                     expires_at: Date.now() + 600000,
                 }),
                 cancelPairing: async () => { },
+                expirePairing: async () => { },
                 getStatus: async () => ({
                     connected: false,
                     pairing: false,

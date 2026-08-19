@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('electron', {
     opm: {
         startPairing: (): Promise<OPMPairingState> => ipcRenderer.invoke('opm-start-pairing'),
         cancelPairing: (): Promise<void> => ipcRenderer.invoke('opm-cancel-pairing'),
+        expirePairing: (): Promise<void> => ipcRenderer.invoke('opm-expire-pairing'),
         getStatus: (): Promise<OPMBridgeStatus> => ipcRenderer.invoke('opm-get-status'),
         disconnect: (): Promise<void> => ipcRenderer.invoke('opm-disconnect'),
         fetchSchema: (): Promise<OPMSchema> => ipcRenderer.invoke('opm-fetch-schema'),

@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('electron', {
         pushMeeting: (meetingId: number, projectId?: string | null): Promise<{ queued: boolean; pushed: boolean }> =>
             ipcRenderer.invoke('opm-push-meeting', { meetingId, projectId }),
         setBaseUrl: (url: string): Promise<string> => ipcRenderer.invoke('opm-set-base-url', url),
+        retryDeadLetter: (id?: number): Promise<void> => ipcRenderer.invoke('opm-retry-dead-letter', id),
         onStatusChange: (callback: (data: OPMBridgeStatus) => void) => {
             const subscription = (_event: unknown, data: OPMBridgeStatus) => callback(data);
             ipcRenderer.on('opm-status-update', subscription);

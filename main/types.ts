@@ -68,6 +68,7 @@ export interface OutboundQueueItem {
     attempts: number;
     next_attempt_at: string | null;
     last_error: string | null;
+    dead_lettered_at?: string | null;
     created_at: string;
 }
 
@@ -236,6 +237,8 @@ export interface OPMBridgeStatus {
     deviceName?: string;
     lastPushAt?: string | null;
     pendingQueueCount: number;
+    deadLetterCount: number;
+    deadLetterItems?: OutboundQueueItem[];
     error?: string | null;
 }
 

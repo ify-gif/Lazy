@@ -743,6 +743,34 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         </div>
                                     )}
 
+                                    {opmStatus.deadLetterCount > 0 && (
+                                        <div className="space-y-1 pt-1.5 border-t border-border/40">
+                                            <div className="text-[11px] text-destructive font-semibold flex items-center justify-between gap-1.5">
+                                                <span className="flex items-center gap-1">
+                                                    <AlertCircle size={13} /> {opmStatus.deadLetterCount} item(s) dead-lettered (max retries reached)
+                                                </span>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-6 px-2 text-[10px]"
+                                                    onClick={() => void window.electron.opm.retryDeadLetter()}
+                                                >
+                                                    Retry Dead-Lettered
+                                                </Button>
+                                            </div>
+                                            {opmStatus.deadLetterItems && opmStatus.deadLetterItems.length > 0 && (
+                                                <div className="text-[10px] text-muted-foreground bg-destructive/5 border border-destructive/20 p-2 rounded max-h-24 overflow-y-auto space-y-1 font-mono">
+                                                    {opmStatus.deadLetterItems.map((item) => (
+                                                        <div key={item.id} className="flex justify-between items-start gap-1">
+                                                            <span className="truncate">Key: {item.idempotency_key}</span>
+                                                            <span className="text-destructive shrink-0">{item.last_error || 'Failed'}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     <div className="pt-2 flex justify-end">
                                         <Button size="sm" variant="destructive" onClick={handleDisconnectOPM} className="h-8 px-3 text-xs">
                                             Disconnect O.PM

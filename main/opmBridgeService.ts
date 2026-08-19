@@ -13,6 +13,8 @@ import {
 } from './types';
 import { logger } from './logger';
 
+export const MAX_ATTEMPTS = 12;
+
 export const DEFAULT_OPM_BASE_URL = 'https://opmhub.app';
 
 interface DeviceCodeResponse {
@@ -87,7 +89,9 @@ export const OPMBridgeService = {
 
     async getStatus(): Promise<OPMBridgeStatus> {
         const token = Store.getOPMToken();
-        const queueCount = await DBService.getOutboundQueueCount().catch(() => 0);
+        const pendingQueueCount = await DBService.getOutboundQueueCount().catch(() => 0);
+        const deadLetterCount = await DBService.getDeadLetterCount().catch(() => 0);
+        const deadLetterItems = await DBService.getDeadLetteredOutboundQueue().catch(() => []);
         return {
             connected: !!token,
             pairing: !!this.pairingState,
@@ -98,16 +102,30 @@ export const OPMBridgeService = {
             workspaceId: Store.get('opmWorkspaceId') || undefined,
             deviceId: this.getDeviceId(),
             deviceName: this.getDeviceName(),
-            pendingQueueCount: queueCount,
+            pendingQueueCount,
+            deadLetterCount,
+            deadLetterItems,
             error: this.lastError,
         };
     },
 
+    async retryDeadLetter(id?: number): Promise<void> {
+        await DBService.retryDeadLetteredOutboundQueue(id);
+        void this.drainQueue();
+        this.broadcastStatus();
+    },
+
     broadcastStatus(): void {
         void this.getStatus().then((status) => {
-            BrowserWindow.getAllWindows().forEach((win) => {
-                win.webContents.send('opm-status-update', status);
-            });
+            try {
+                if (typeof BrowserWindow !== 'undefined' && BrowserWindow && typeof BrowserWindow.getAllWindows === 'function') {
+                    BrowserWindow.getAllWindows().forEach((win) => {
+                        win.webContents.send('opm-status-update', status);
+                    });
+                }
+            } catch {
+                // Ignore in non-Electron test environment
+            }
         });
     },
 
@@ -364,7 +382,7 @@ export const OPMBridgeService = {
         // Parse summary markdown into structured sections
         const sections = AIService.parseSummarySections(meeting.summary);
 
-        const occurredAt = meeting.created_at || meeting.occurred_at || new Date().toISOString();
+        const occurredAt = meeting.occurred_at || meeting.created_at || new Date().toISOString();
 
         const pushPayload: OPMMeetingPushPayload = {
             kind: 'meeting',
@@ -387,13 +405,23 @@ export const OPMBridgeService = {
 
         const idempotencyKey = `lazy:${deviceId}:${meeting.id}`;
 
-        // Save sync fields to meeting row
-        await DBService.updateMeetingSyncState(meeting.id, {
+        const syncUpdate: {
+            deviceId: string;
+            template: MeetingTemplate;
+            opmWorkspaceId?: string;
+            occurredAt?: string;
+        } = {
             deviceId,
-            occurredAt,
             template,
             opmWorkspaceId: Store.get('opmWorkspaceId') || undefined,
-        });
+        };
+
+        if (!meeting.occurred_at) {
+            syncUpdate.occurredAt = occurredAt;
+        }
+
+        // Save sync fields to meeting row
+        await DBService.updateMeetingSyncState(meeting.id, syncUpdate);
 
         // Save action items to action_items table
         if (extractions.length > 0) {
@@ -432,13 +460,9 @@ export const OPMBridgeService = {
             const pendingItems = await DBService.getPendingOutboundQueue();
             for (const item of pendingItems) {
                 const currentToken = Store.getOPMToken();
-                if (!currentToken) break; // disconnected
+                if (!currentToken) break; // disconnected or auth failed
 
-                const success = await this.processQueueItem(item, currentToken);
-                if (!success) {
-                    // Stop processing subsequent queue items on auth/network failure
-                    break;
-                }
+                await this.processQueueItem(item, currentToken);
             }
         } catch (err) {
             logger.error('Error during outbound queue drain', err);
@@ -502,19 +526,32 @@ export const OPMBridgeService = {
             // Other HTTP errors (4xx / 5xx): retry with exponential backoff
             const errText = await response.text().catch(() => '');
             const attempts = item.attempts + 1;
+            const lastError = `HTTP ${response.status}: ${errText.slice(0, 200)}`;
+
+            if (attempts >= MAX_ATTEMPTS) {
+                await DBService.markOutboundDeadLetter(item.id, `Max attempts (${MAX_ATTEMPTS}) reached. ${lastError}`);
+                return false;
+            }
+
             const delaySec = Math.min(300, Math.pow(2, attempts)); // 2s, 4s, 8s, 16s, 32s... cap at 300s
             const nextAttemptAt = new Date(Date.now() + delaySec * 1000).toISOString();
-            const lastError = `HTTP ${response.status}: ${errText.slice(0, 200)}`;
 
             await DBService.updateOutboundAttempt(item.id, attempts, nextAttemptAt, lastError);
             return false;
         } catch (err: unknown) {
             const errMessage = err instanceof Error ? err.message : String(err);
             const attempts = item.attempts + 1;
+            const lastError = errMessage.slice(0, 200);
+
+            if (attempts >= MAX_ATTEMPTS) {
+                await DBService.markOutboundDeadLetter(item.id, `Max attempts (${MAX_ATTEMPTS}) reached. ${lastError}`);
+                return false;
+            }
+
             const delaySec = Math.min(300, Math.pow(2, attempts));
             const nextAttemptAt = new Date(Date.now() + delaySec * 1000).toISOString();
 
-            await DBService.updateOutboundAttempt(item.id, attempts, nextAttemptAt, errMessage);
+            await DBService.updateOutboundAttempt(item.id, attempts, nextAttemptAt, lastError);
             return false;
         }
     },

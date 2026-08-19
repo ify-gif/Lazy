@@ -688,6 +688,25 @@ export default function MeetingPage() {
         if (!summary || !window.electron?.ai) return;
         setIsExtractingItems(true);
         try {
+            let targetMeetingId = selectedMeetingId;
+            if (!targetMeetingId) {
+                if (!hasValidMeetingTitle()) {
+                    setAlertMessage("Please create a meeting title before extracting action items.");
+                    setIsExtractingItems(false);
+                    return;
+                }
+                if (window.electron?.db?.saveMeeting) {
+                    targetMeetingId = await window.electron.db.saveMeeting(
+                        title.trim(),
+                        transcript,
+                        summary,
+                        selectedThreadId ?? undefined
+                    );
+                    setSelectedMeetingId(targetMeetingId);
+                    await loadHistory();
+                }
+            }
+
             const items = await window.electron.ai.extractActionItems(summary);
             if (!items || items.length === 0) {
                 setAlertMessage("No action items found in this summary.");
@@ -696,8 +715,8 @@ export default function MeetingPage() {
             } else {
                 setActionItems(items.map(item => ({ ...item, status: 'idle' as ActionItemStatus })));
                 setActionItemsVisible(true);
-                if (selectedMeetingId && window.electron?.db?.saveActionItems) {
-                    await window.electron.db.saveActionItems(selectedMeetingId, items);
+                if (targetMeetingId && window.electron?.db?.saveActionItems) {
+                    await window.electron.db.saveActionItems(targetMeetingId, items);
                 }
             }
         } catch (err) {

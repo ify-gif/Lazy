@@ -196,6 +196,12 @@ export const DBService = {
                     `);
                 },
             },
+            {
+                id: '013_add_outbound_dead_letter',
+                run: async () => {
+                    await this.addColumnIfMissing('outbound_queue', 'dead_lettered_at', 'DATETIME');
+                },
+            },
         ];
 
         for (const migration of migrations) {
@@ -707,7 +713,7 @@ export const DBService = {
         if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
             db.all(
-                "SELECT * FROM outbound_queue WHERE next_attempt_at IS NULL OR datetime(next_attempt_at) <= datetime('now') ORDER BY created_at ASC",
+                "SELECT * FROM outbound_queue WHERE dead_lettered_at IS NULL AND (next_attempt_at IS NULL OR datetime(next_attempt_at) <= datetime('now')) ORDER BY created_at ASC",
                 (err, rows) => {
                     if (err) reject(err);
                     else resolve(rows as OutboundQueueItem[]);
@@ -720,10 +726,76 @@ export const DBService = {
         const db = this.db;
         if (!db) throw new Error('Database not initialized');
         return new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM outbound_queue', (err, row: { count: number }) => {
+            db.get("SELECT COUNT(*) as count FROM outbound_queue WHERE dead_lettered_at IS NULL", (err, row: { count: number }) => {
                 if (err) reject(err);
                 else resolve(row ? row.count : 0);
             });
+        });
+    },
+
+    async getDeadLetteredOutboundQueue(): Promise<OutboundQueueItem[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.all(
+                "SELECT * FROM outbound_queue WHERE dead_lettered_at IS NOT NULL ORDER BY created_at ASC",
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows as OutboundQueueItem[]);
+                }
+            );
+        });
+    },
+
+    async getDeadLetterCount(): Promise<number> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM outbound_queue WHERE dead_lettered_at IS NOT NULL", (err, row: { count: number }) => {
+                if (err) reject(err);
+                else resolve(row ? row.count : 0);
+            });
+        });
+    },
+
+    async markOutboundDeadLetter(id: number, lastError: string): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run(
+                "UPDATE outbound_queue SET dead_lettered_at = datetime('now'), last_error = ? WHERE id = ?",
+                [lastError, id],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    },
+
+    async retryDeadLetteredOutboundQueue(id?: number): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            if (id !== undefined) {
+                db.run(
+                    "UPDATE outbound_queue SET dead_lettered_at = NULL, attempts = 0, next_attempt_at = NULL WHERE id = ?",
+                    [id],
+                    (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            } else {
+                db.run(
+                    "UPDATE outbound_queue SET dead_lettered_at = NULL, attempts = 0, next_attempt_at = NULL WHERE dead_lettered_at IS NOT NULL",
+                    [],
+                    (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            }
         });
     },
 

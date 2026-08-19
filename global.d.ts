@@ -69,6 +69,7 @@ declare global {
                 fetchSchema: () => Promise<OPMSchema>;
                 pushMeeting: (meetingId: number, projectId?: string | null) => Promise<{ queued: boolean; pushed: boolean }>;
                 setBaseUrl: (url: string) => Promise<string>;
+                retryDeadLetter: (id?: number) => Promise<void>;
                 onStatusChange: (callback: (data: OPMBridgeStatus) => void) => () => void;
             };
             platform: string;

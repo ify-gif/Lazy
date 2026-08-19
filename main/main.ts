@@ -486,6 +486,10 @@ ipcMain.handle('opm-set-base-url', (_event, url: string) => {
     return OPMBridgeService.setBaseUrl(url);
 });
 
+ipcMain.handle('opm-retry-dead-letter', async (_event, id?: number) => {
+    await OPMBridgeService.retryDeadLetter(id);
+});
+
 ipcMain.handle('db-get-action-items', async (_event, meetingId: number) => {
     return await DBService.getActionItems(meetingId);
 });

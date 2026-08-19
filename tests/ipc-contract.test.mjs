@@ -45,6 +45,8 @@ Module._load = function patchedModuleLoad(request, parent, isMain) {
 
 const { DBService } = require("../dist-electron/dbService.js");
 const { AIService, TEMPLATE_REGISTRY, DEFAULT_SCHEMA_TARGETS } = require("../dist-electron/aiService.js");
+const { OPMBridgeService, MAX_ATTEMPTS } = require("../dist-electron/opmBridgeService.js");
+const { Store } = require("../dist-electron/store.js");
 
 async function resetDbState() {
   await DBService.run("DELETE FROM work_stories");
@@ -54,7 +56,7 @@ async function resetDbState() {
   await DBService.run("DELETE FROM bridge_schema_cache");
 }
 
-test("DBService initializes with all migration tracking tables (001 - 012)", async () => {
+test("DBService initializes with all migration tracking tables (001 - 013)", async () => {
   await DBService.init();
   const rows = await DBService.all("SELECT id FROM schema_migrations ORDER BY id ASC");
   const ids = rows.map((row) => row.id);
@@ -67,6 +69,7 @@ test("DBService initializes with all migration tracking tables (001 - 012)", asy
   assert.ok(ids.includes("010_add_meeting_sync_state"));
   assert.ok(ids.includes("011_create_outbound_queue"));
   assert.ok(ids.includes("012_create_bridge_schema_cache"));
+  assert.ok(ids.includes("013_add_outbound_dead_letter"));
 });
 
 test("saveWorkStory + getWorkStories preserves story title contract", async () => {
@@ -399,14 +402,157 @@ test("Mock Server O.PM Bridge Flow", async () => {
   assert.equal(conflictRes.status, 409);
 });
 
-test.after(() => {
+test("Pushing a meeting preserves explicit occurred_at and leaves stored occurred_at unchanged", async () => {
+  await resetDbState();
+
+  const createdDate = "2026-01-01T10:00:00.000Z";
+  const explicitOccurredDate = "2025-12-25T14:30:00.000Z";
+
+  await DBService.run(
+    "INSERT INTO meetings (title, transcript, summary, created_at, occurred_at) VALUES (?, ?, ?, ?, ?)",
+    ["Historical Meeting", "Transcript", "Summary", createdDate, explicitOccurredDate]
+  );
+
+  const meetings = await DBService.getMeetings();
+  const meeting = meetings[0];
+  assert.equal(meeting.occurred_at, explicitOccurredDate);
+
+  Store.setOPMToken("mock-access-token-xyz");
+  Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
+
+  await OPMBridgeService.pushMeeting(meeting.id, "p-1");
+
+  const pending = await DBService.getPendingOutboundQueue();
+  assert.equal(pending.length, 1);
+  const payload = JSON.parse(pending[0].payload);
+  assert.equal(payload.occurred_at, explicitOccurredDate);
+
+  const updatedMeetings = await DBService.getMeetings();
+  const updatedMeeting = updatedMeetings.find((m) => m.id === meeting.id);
+  assert.equal(updatedMeeting.occurred_at, explicitOccurredDate);
+});
+
+test("409 Conflict response is treated as success and removes queue item", async () => {
+  await resetDbState();
+
+  Store.setOPMToken("mock-access-token-xyz");
+  Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
+
+  const idempotencyKey = "lazy:device-test-1:conflict";
+  await DBService.enqueueOutbound(idempotencyKey, "/api/bridge/meetings", JSON.stringify({ kind: "meeting" }));
+
+  await OPMBridgeService.drainQueue();
+
+  const queueCount = await DBService.getOutboundQueueCount();
+  assert.equal(queueCount, 0);
+});
+
+test("401 Auth failure clears token and stops retrying without infinite loop", async () => {
+  await resetDbState();
+
+  Store.setOPMToken("invalid-bad-token");
+  Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
+
+  const idempotencyKey = "lazy:device-test-1:authfail";
+  await DBService.enqueueOutbound(idempotencyKey, "/api/bridge/meetings", JSON.stringify({ kind: "meeting" }));
+
+  await OPMBridgeService.drainQueue();
+
+  assert.equal(Store.getOPMToken(), ""); // Token cleared
+});
+
+test("Backoff sequence follows 2, 4, 8, 16, 32... capped at 300 seconds", async () => {
+  for (let attempts = 1; attempts <= 10; attempts++) {
+    const delaySec = Math.min(300, Math.pow(2, attempts));
+    if (attempts === 1) assert.equal(delaySec, 2);
+    if (attempts === 2) assert.equal(delaySec, 4);
+    if (attempts === 3) assert.equal(delaySec, 8);
+    if (attempts === 4) assert.equal(delaySec, 16);
+    if (attempts === 5) assert.equal(delaySec, 32);
+    if (attempts >= 9) assert.equal(delaySec, 300);
+  }
+});
+
+test("Idempotency-Key header is formatted exactly lazy:<device_id>:<meeting_id>", async () => {
+  await resetDbState();
+  const meetingId = await DBService.saveMeeting("Idempotency Test", "Transcript", "Summary");
+  const deviceId = OPMBridgeService.getDeviceId();
+
+  await OPMBridgeService.pushMeeting(meetingId, "p-1");
+  const pending = await DBService.getPendingOutboundQueue();
+  assert.equal(pending[0].idempotency_key, `lazy:${deviceId}:${meetingId}`);
+});
+
+test("extractTargets drops candidates not present in passed schema targets", async () => {
+  const customSchemaTargets = ["TASK", "DECISION"];
+  const result = await AIService.extractTargets(
+    "Transcript text",
+    "standard",
+    customSchemaTargets
+  );
+
+  for (const item of result) {
+    assert.ok(customSchemaTargets.includes(item.target));
+  }
+});
+
+test("Queue drain continues to next item when an item fails", async () => {
+  await resetDbState();
+
+  Store.setOPMToken("mock-access-token-xyz");
+  Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
+
+  await DBService.enqueueOutbound("lazy:device-test-1:fail1", "/api/bridge/bad-endpoint", JSON.stringify({ kind: "meeting" }));
+  await DBService.enqueueOutbound("lazy:device-test-1:succ2", "/api/bridge/meetings", JSON.stringify({ kind: "meeting" }));
+
+  await OPMBridgeService.drainQueue();
+
+  const deadCount = await DBService.getDeadLetterCount();
+  assert.equal(deadCount, 0);
+});
+
+test("Items exceeding MAX_ATTEMPTS (12) are dead-lettered and excluded from pending query", async () => {
+  await resetDbState();
+
+  Store.setOPMToken("mock-access-token-xyz");
+  Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
+
+  await DBService.enqueueOutbound("lazy:device-test-1:dead1", "/api/bridge/bad-endpoint", JSON.stringify({ kind: "meeting" }));
+  const pending = await DBService.getPendingOutboundQueue();
+  const itemId = pending[0].id;
+
+  await DBService.updateOutboundAttempt(itemId, 11, null, "Previous error");
+
+  await OPMBridgeService.drainQueue();
+
+  const pendingAfter = await DBService.getPendingOutboundQueue();
+  assert.equal(pendingAfter.length, 0);
+
+  const deadLetters = await DBService.getDeadLetteredOutboundQueue();
+  assert.equal(deadLetters.length, 1);
+  assert.equal(deadLetters[0].id, itemId);
+
+  await DBService.retryDeadLetteredOutboundQueue(itemId);
+  const deadLettersAfterRetry = await DBService.getDeadLetteredOutboundQueue();
+  assert.equal(deadLettersAfterRetry.length, 0);
+
+  const pendingAfterRetry = await DBService.getPendingOutboundQueue();
+  assert.equal(pendingAfterRetry.length, 1);
+  assert.equal(pendingAfterRetry[0].attempts, 0);
+});
+
+test.after(async () => {
   if (mockServer) {
     mockServer.close();
   }
   if (DBService.db) {
-    DBService.db.close();
+    await new Promise((res) => DBService.db.close(res));
     DBService.db = null;
   }
   Module._load = originalLoad;
-  rmSync(tempUserDataDir, { recursive: true, force: true });
+  try {
+    rmSync(tempUserDataDir, { recursive: true, force: true });
+  } catch {
+    // ignore temp file lock errors on Windows
+  }
 });

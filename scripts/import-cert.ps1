@@ -1,4 +1,4 @@
-$p = ConvertTo-SecureString 'LazyDev123!' -AsPlainText -Force
+$p = ConvertTo-SecureString 'LazyDev2026!' -AsPlainText -Force
 Import-PfxCertificate -FilePath 'c:\Users\Ify Gaaga\Lazy\certs\dev-cert.pfx' -CertStoreLocation 'Cert:\CurrentUser\Root' -Password $p
 Import-PfxCertificate -FilePath 'c:\Users\Ify Gaaga\Lazy\certs\dev-cert.pfx' -CertStoreLocation 'Cert:\CurrentUser\TrustedPublisher' -Password $p
 

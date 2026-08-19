@@ -66,6 +66,18 @@ async function installElectronMock(page: Page) {
                     getComments: (storyId: number) => Promise<WorkStory[]>;
                     updateWorkStoryTitle: (id: number, title: string) => Promise<void>;
                     deleteItem: (table: 'meetings' | 'work_stories', id: number) => Promise<void>;
+                    getActionItems: (meetingId: number) => Promise<unknown[]>;
+                    saveActionItems: (meetingId: number, items: unknown[]) => Promise<unknown[]>;
+                };
+                opm: {
+                    startPairing: () => Promise<unknown>;
+                    cancelPairing: () => Promise<void>;
+                    getStatus: () => Promise<unknown>;
+                    disconnect: () => Promise<void>;
+                    fetchSchema: () => Promise<unknown>;
+                    pushMeeting: () => Promise<{ queued: boolean; pushed: boolean }>;
+                    setBaseUrl: (url: string) => Promise<string>;
+                    onStatusChange: (cb: (data: unknown) => void) => () => void;
                 };
                 platform: string;
             };
@@ -164,7 +176,7 @@ async function installElectronMock(page: Page) {
                     isStale: false,
                 }),
                 pushMeeting: async () => ({ queued: true, pushed: false }),
-                setBaseUrl: async (url) => url,
+                setBaseUrl: async (url: string) => url,
                 onStatusChange: () => () => { },
             },
             platform: 'win32',

@@ -965,7 +965,7 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                                 className="h-6 px-2 text-[10px]"
                                                 onClick={() => void handlePairDiscoveredPeer(peer)}
                                             >
-                                                <Link size={11} className="mr-1" /> Pair
+                                                <LinkIcon size={11} className="mr-1" /> Pair
                                             </Button>
                                         </div>
                                     ))}

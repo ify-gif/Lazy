@@ -134,6 +134,38 @@ async function installElectronMock(page: Page) {
 
                     state.workStories = state.workStories.filter((item) => item.id !== id && item.parent_id !== id);
                 },
+                getActionItems: async () => [],
+                saveActionItems: async () => [],
+            },
+            opm: {
+                startPairing: async () => ({
+                    device_code: 'mock-code',
+                    user_code: 'MOCK-1234',
+                    verification_uri: 'http://localhost/verify',
+                    interval: 5,
+                    expires_in: 600,
+                    expires_at: Date.now() + 600000,
+                }),
+                cancelPairing: async () => { },
+                getStatus: async () => ({
+                    connected: false,
+                    pairing: false,
+                    baseUrl: 'https://opmhub.app',
+                    deviceId: 'mock-device',
+                    deviceName: 'Mock Device',
+                    pendingQueueCount: 0,
+                }),
+                disconnect: async () => { },
+                fetchSchema: async () => ({
+                    protocol: 1,
+                    targets: ['TASK', 'RAID', 'DECISION'],
+                    projects: [{ id: 'p-1', name: 'Mock Project' }],
+                    workspace: { id: 'w-1', name: 'Mock Workspace' },
+                    isStale: false,
+                }),
+                pushMeeting: async () => ({ queued: true, pushed: false }),
+                setBaseUrl: async (url) => url,
+                onStatusChange: () => () => { },
             },
             platform: 'win32',
         };

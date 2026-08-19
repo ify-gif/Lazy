@@ -1,4 +1,4 @@
-import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent, TeamDiagnostics } from './main/types';
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent, TeamDiagnostics, OPMBridgeStatus, OPMPairingState, OPMSchema, ActionItemRecord } from './main/types';
 declare global {
     interface Window {
         electron: {
@@ -48,6 +48,8 @@ declare global {
                 saveTeamDevice: (deviceName: string, pairingCode: string) => Promise<TeamDevice>;
                 updateTeamDeviceTrustMode: (deviceId: string, trustMode: TeamTrustMode) => Promise<void>;
                 deleteTeamDevice: (deviceId: string) => Promise<void>;
+                getActionItems: (meetingId: number) => Promise<ActionItemRecord[]>;
+                saveActionItems: (meetingId: number, items: ActionItem[]) => Promise<ActionItemRecord[]>;
             };
             team: {
                 getLocalProfile: () => Promise<LocalTeamProfile>;
@@ -58,6 +60,16 @@ declare global {
                 probePeer: (address: string) => Promise<LanPeer>;
                 sendShare: (peerDeviceId: string, packet: TeamSharePacket) => Promise<void>;
                 onEvent: (callback: (event: TeamShareEvent) => void) => () => void;
+            };
+            opm: {
+                startPairing: () => Promise<OPMPairingState>;
+                cancelPairing: () => Promise<void>;
+                getStatus: () => Promise<OPMBridgeStatus>;
+                disconnect: () => Promise<void>;
+                fetchSchema: () => Promise<OPMSchema>;
+                pushMeeting: (meetingId: number, projectId?: string | null) => Promise<{ queued: boolean; pushed: boolean }>;
+                setBaseUrl: (url: string) => Promise<string>;
+                onStatusChange: (callback: (data: OPMBridgeStatus) => void) => () => void;
             };
             platform: string;
         };

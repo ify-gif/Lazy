@@ -447,6 +447,8 @@ ipcMain.handle('team-get-diagnostics', () => {
     return TeamShareService.getDiagnostics();
 });
 
+import { OPMBridgeService } from './opmBridgeService';
+
 ipcMain.handle('team-probe-peer', async (_event, address: string) => {
     return await TeamShareService.probePeer(address);
 });
@@ -455,9 +457,47 @@ ipcMain.handle('team-send-share', async (_event, { peerDeviceId, packet }) => {
     return await TeamShareService.sendShare(peerDeviceId, packet);
 });
 
+// O.PM Bridge Handlers
+ipcMain.handle('opm-start-pairing', async () => {
+    return await OPMBridgeService.startPairing();
+});
+
+ipcMain.handle('opm-cancel-pairing', () => {
+    OPMBridgeService.cancelPairing();
+});
+
+ipcMain.handle('opm-get-status', async () => {
+    return await OPMBridgeService.getStatus();
+});
+
+ipcMain.handle('opm-disconnect', () => {
+    OPMBridgeService.disconnect();
+});
+
+ipcMain.handle('opm-fetch-schema', async () => {
+    return await OPMBridgeService.fetchSchema();
+});
+
+ipcMain.handle('opm-push-meeting', async (_event, { meetingId, projectId }: { meetingId: number; projectId?: string | null }) => {
+    return await OPMBridgeService.pushMeeting(meetingId, projectId);
+});
+
+ipcMain.handle('opm-set-base-url', (_event, url: string) => {
+    return OPMBridgeService.setBaseUrl(url);
+});
+
+ipcMain.handle('db-get-action-items', async (_event, meetingId: number) => {
+    return await DBService.getActionItems(meetingId);
+});
+
+ipcMain.handle('db-save-action-items', async (_event, { meetingId, items }) => {
+    return await DBService.saveActionItems(meetingId, items);
+});
+
 app.whenReady().then(async () => {
     await createWindow();
     await TeamShareService.start();
+    OPMBridgeService.start();
 
     // Check for updates periodically (every hour)
     const CHECK_INTERVAL = 1000 * 60 * 60; // 60 minutes
@@ -480,6 +520,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+    OPMBridgeService.stop();
     TeamShareService.stop();
     staticServer?.close();
     staticServer = null;

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent, TeamDiagnostics } from './types';
+import { AppStatus, StatusUpdate, UpdateEvent, Meeting, WorkStory, AIResponse, ActionItem, Thread, MeetingTemplate, TeamDevice, TeamTrustMode, LocalTeamProfile, LanPeer, TeamSharePacket, TeamShareEvent, TeamDiagnostics, OPMBridgeStatus, OPMPairingState, OPMSchema, ActionItemRecord } from './types';
 
 contextBridge.exposeInMainWorld('electron', {
     windowControls: {
@@ -62,6 +62,9 @@ contextBridge.exposeInMainWorld('electron', {
         updateTeamDeviceTrustMode: (deviceId: string, trustMode: TeamTrustMode): Promise<void> =>
             ipcRenderer.invoke('db-update-team-device-trust-mode', { deviceId, trustMode }),
         deleteTeamDevice: (deviceId: string): Promise<void> => ipcRenderer.invoke('db-delete-team-device', { deviceId }),
+        getActionItems: (meetingId: number): Promise<ActionItemRecord[]> => ipcRenderer.invoke('db-get-action-items', meetingId),
+        saveActionItems: (meetingId: number, items: ActionItem[]): Promise<ActionItemRecord[]> =>
+            ipcRenderer.invoke('db-save-action-items', { meetingId, items }),
     },
     team: {
         getLocalProfile: (): Promise<LocalTeamProfile> => ipcRenderer.invoke('team-get-local-profile'),
@@ -76,6 +79,21 @@ contextBridge.exposeInMainWorld('electron', {
             const subscription = (_event: unknown, event: TeamShareEvent) => callback(event);
             ipcRenderer.on('team-share-event', subscription);
             return () => ipcRenderer.removeListener('team-share-event', subscription);
+        },
+    },
+    opm: {
+        startPairing: (): Promise<OPMPairingState> => ipcRenderer.invoke('opm-start-pairing'),
+        cancelPairing: (): Promise<void> => ipcRenderer.invoke('opm-cancel-pairing'),
+        getStatus: (): Promise<OPMBridgeStatus> => ipcRenderer.invoke('opm-get-status'),
+        disconnect: (): Promise<void> => ipcRenderer.invoke('opm-disconnect'),
+        fetchSchema: (): Promise<OPMSchema> => ipcRenderer.invoke('opm-fetch-schema'),
+        pushMeeting: (meetingId: number, projectId?: string | null): Promise<{ queued: boolean; pushed: boolean }> =>
+            ipcRenderer.invoke('opm-push-meeting', { meetingId, projectId }),
+        setBaseUrl: (url: string): Promise<string> => ipcRenderer.invoke('opm-set-base-url', url),
+        onStatusChange: (callback: (data: OPMBridgeStatus) => void) => {
+            const subscription = (_event: unknown, data: OPMBridgeStatus) => callback(data);
+            ipcRenderer.on('opm-status-update', subscription);
+            return () => ipcRenderer.removeListener('opm-status-update', subscription);
         },
     },
     platform: process.platform

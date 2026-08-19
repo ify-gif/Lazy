@@ -11,6 +11,12 @@ export interface Meeting {
     summary: string;
     created_at?: string;
     thread_id?: number | null;
+    device_id?: string | null;
+    occurred_at?: string | null;
+    template?: string | null;
+    pushed_at?: string | null;
+    external_ref?: string | null;
+    opm_workspace_id?: string | null;
 }
 
 export interface WorkStory {
@@ -25,8 +31,50 @@ export interface WorkStory {
 }
 
 export interface ActionItem {
+    id?: number;
+    meeting_id?: number;
+    target?: string;
     text: string;
-    assignee?: string;
+    body?: string | null;
+    assignee?: string | null;
+    due_date?: string | null;
+    raid_type?: string | null;
+    confidence?: number;
+    pushed_at?: string | null;
+    external_ref?: string | null;
+    created_at?: string;
+}
+
+export interface ActionItemRecord {
+    id: number;
+    meeting_id: number;
+    target: string;
+    text: string;
+    body: string | null;
+    assignee: string | null;
+    due_date: string | null;
+    raid_type: string | null;
+    confidence: number;
+    pushed_at: string | null;
+    external_ref: string | null;
+    created_at: string;
+}
+
+export interface OutboundQueueItem {
+    id: number;
+    idempotency_key: string;
+    endpoint: string;
+    payload: string;
+    attempts: number;
+    next_attempt_at: string | null;
+    last_error: string | null;
+    created_at: string;
+}
+
+export interface BridgeSchemaCache {
+    id: number;
+    payload: string;
+    fetched_at: string;
 }
 
 export interface AIResponse {
@@ -47,6 +95,14 @@ export interface UpdateEvent {
 }
 
 export type MeetingTemplate = 'standard' | 'standup' | 'action_items' | 'decision_log';
+
+export interface TemplateDefinition {
+    id: MeetingTemplate;
+    label: string;
+    sections: string[];
+    targets: string[];
+    prompt: (transcript: string, previousSummary?: string) => string;
+}
 
 export type TeamTrustMode = 'trusted' | 'ask' | 'blocked';
 
@@ -104,3 +160,82 @@ export interface TeamDiagnostics {
     peerCount: number;
     profileReady: boolean;
 }
+
+// O.PM Bridge Interfaces
+export interface OPMPairingState {
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    interval: number;
+    expires_in: number;
+    expires_at: number;
+}
+
+export interface OPMProject {
+    id: string;
+    name: string;
+}
+
+export interface OPMWorkspace {
+    id: string;
+    name: string;
+}
+
+export interface OPMSchema {
+    protocol: 1;
+    targets: string[];
+    projects: OPMProject[];
+    workspace: OPMWorkspace;
+    isStale?: boolean;
+    fetched_at?: string;
+}
+
+export interface OPMExtractionItem {
+    target: string;
+    title: string;
+    body: string | null;
+    owner: string | null;
+    due_date: string | null;
+    raid_type: 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DEPENDENCY' | null;
+    confidence: number;
+}
+
+export interface OPMMeetingSection {
+    heading: string;
+    body: string;
+}
+
+export interface OPMMeetingPushPayload {
+    kind: 'meeting';
+    protocol: 1;
+    source: {
+        device_id: string;
+        device_name: string;
+        lazy_version: string;
+        meeting_id: number;
+    };
+    template: string;
+    title: string;
+    occurred_at: string;
+    project_id: string | null;
+    transcript: string;
+    summary_md: string;
+    sections: OPMMeetingSection[];
+    extractions: OPMExtractionItem[];
+}
+
+export interface OPMBridgeStatus {
+    connected: boolean;
+    pairing: boolean;
+    pairingState?: OPMPairingState | null;
+    baseUrl: string;
+    accountEmail?: string;
+    workspaceName?: string;
+    workspaceId?: string;
+    deviceId?: string;
+    deviceName?: string;
+    lastPushAt?: string | null;
+    pendingQueueCount: number;
+    error?: string | null;
+}
+

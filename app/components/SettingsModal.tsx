@@ -1,7 +1,7 @@
-import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link, Info, ChevronDown, Pencil } from "lucide-react";
+import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link as LinkIcon, Info, ChevronDown, Pencil, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useTheme } from "next-themes";
-import { LanPeer, LocalTeamProfile, TeamDevice, TeamDiagnostics, TeamTrustMode, TeamShareEvent, UpdateEvent } from "../../main/types";
+import { LanPeer, LocalTeamProfile, TeamDevice, TeamDiagnostics, TeamTrustMode, TeamShareEvent, UpdateEvent, OPMBridgeStatus, OPMPairingState } from "../../main/types";
 import Button from "./Button";
 import Input from "./Input";
 import { generatePairingCode } from "../lib/lazyshare";
@@ -47,6 +47,12 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [isEditingLocalName, setIsEditingLocalName] = useState(false);
     const [isPairingCodeFresh, setIsPairingCodeFresh] = useState(false);
 
+    // O.PM Bridge State
+    const [opmStatus, setOpmStatus] = useState<OPMBridgeStatus | null>(null);
+    const [customBaseUrl, setCustomBaseUrl] = useState("https://opmhub.app");
+    const [isEditingBaseUrl, setIsEditingBaseUrl] = useState(false);
+    const [isPairingLoading, setIsPairingLoading] = useState(false);
+
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -77,6 +83,17 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
         }
     }
 
+    const loadOPMStatus = async () => {
+        if (!window.electron?.opm) return;
+        try {
+            const status = await window.electron.opm.getStatus();
+            setOpmStatus(status);
+            if (status.baseUrl) setCustomBaseUrl(status.baseUrl);
+        } catch (err) {
+            console.error("Failed to load OPM status", err);
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
             getMicrophones();
@@ -91,9 +108,20 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                 void loadLocalProfile();
                 void loadDiscoveredPeers();
                 void loadDiagnostics();
+                void loadOPMStatus();
             } else {
                 const savedMic = localStorage.getItem("selectedMic");
                 if (savedMic) setSelectedMic(savedMic);
+            }
+
+            if (window.electron?.opm) {
+                const unsub = window.electron.opm.onStatusChange((status) => {
+                    setOpmStatus(status);
+                    if (status.baseUrl) setCustomBaseUrl(status.baseUrl);
+                });
+                return () => {
+                    unsub();
+                };
             }
         }
     }, [isOpen]);
@@ -249,6 +277,47 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
             setTeamDiagnostics(diagnostics);
         } catch (err) {
             console.error("Failed to load team diagnostics", err);
+        }
+    };
+
+    const handleStartPairing = async () => {
+        if (!window.electron?.opm) return;
+        try {
+            setIsPairingLoading(true);
+            await window.electron.opm.startPairing();
+        } catch (err: unknown) {
+            console.error("Failed to start pairing", err);
+        } finally {
+            setIsPairingLoading(false);
+        }
+    };
+
+    const handleCancelPairing = async () => {
+        if (!window.electron?.opm) return;
+        try {
+            await window.electron.opm.cancelPairing();
+        } catch (err) {
+            console.error("Failed to cancel pairing", err);
+        }
+    };
+
+    const handleDisconnectOPM = async () => {
+        if (!window.electron?.opm) return;
+        try {
+            await window.electron.opm.disconnect();
+        } catch (err) {
+            console.error("Failed to disconnect OPM", err);
+        }
+    };
+
+    const handleSaveBaseUrl = async () => {
+        if (!window.electron?.opm) return;
+        try {
+            const updated = await window.electron.opm.setBaseUrl(customBaseUrl);
+            setCustomBaseUrl(updated);
+            setIsEditingBaseUrl(false);
+        } catch (err) {
+            console.error("Failed to set base url", err);
         }
     };
 
@@ -600,6 +669,135 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                 )}
                             </div>
                         )}
+                    </div>
+
+                    {/* O.PM Bridge */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                                <LinkIcon size={14} /> O.PM Hub Bridge
+                            </div>
+                            {opmStatus?.connected ? (
+                                <span className="flex items-center gap-1 text-[10px] text-green-500 font-bold lowercase tracking-normal">
+                                    <CheckCircle2 size={12} /> connected
+                                </span>
+                            ) : opmStatus?.pairing ? (
+                                <span className="flex items-center gap-1 text-[10px] text-amber-500 font-bold lowercase tracking-normal animate-pulse">
+                                    pairing...
+                                </span>
+                            ) : (
+                                <span className="text-[10px] text-muted-foreground font-normal lowercase tracking-normal">
+                                    disconnected
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="p-3.5 bg-muted/20 border border-border rounded-lg space-y-3">
+                            {/* Hub URL Settings */}
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="text-muted-foreground font-medium">Hub Server URL:</span>
+                                {isEditingBaseUrl ? (
+                                    <div className="flex gap-2 flex-1 max-w-[320px]">
+                                        <Input
+                                            value={customBaseUrl}
+                                            onChange={(e) => setCustomBaseUrl(e.target.value)}
+                                            placeholder="https://opmhub.app"
+                                            className="h-8 text-xs"
+                                        />
+                                        <Button size="sm" variant="primary" onClick={handleSaveBaseUrl} className="h-8 px-2 text-xs">
+                                            Save
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-foreground text-xs">{customBaseUrl}</span>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => setIsEditingBaseUrl(true)}
+                                            className="h-6 px-1.5 text-[10px]"
+                                        >
+                                            Change
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Status Specific UI */}
+                            {opmStatus?.connected ? (
+                                <div className="space-y-2 pt-2 border-t border-border/50 text-xs">
+                                    <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                                        <div>
+                                            <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Account</span>
+                                            <span className="font-medium text-foreground">{opmStatus.accountEmail || 'Connected'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Workspace</span>
+                                            <span className="font-medium text-foreground">{opmStatus.workspaceName || 'Default Workspace'}</span>
+                                        </div>
+                                    </div>
+
+                                    {opmStatus.pendingQueueCount > 0 && (
+                                        <div className="text-[11px] text-amber-500 font-medium flex items-center gap-1.5 pt-1">
+                                            <AlertCircle size={13} /> {opmStatus.pendingQueueCount} meeting(s) in offline retry queue
+                                        </div>
+                                    )}
+
+                                    <div className="pt-2 flex justify-end">
+                                        <Button size="sm" variant="destructive" onClick={handleDisconnectOPM} className="h-8 px-3 text-xs">
+                                            Disconnect O.PM
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : opmStatus?.pairing ? (
+                                <div className="space-y-3 pt-2 border-t border-border/50 text-xs">
+                                    <div className="bg-primary/10 border border-primary/20 rounded p-3 text-center space-y-2">
+                                        <p className="text-muted-foreground text-xs">Pairing code generated. Enter this code on O.PM Hub:</p>
+                                        <div className="text-2xl font-extrabold tracking-widest font-mono text-primary bg-background border border-border rounded py-1 max-w-[200px] mx-auto select-all">
+                                            {opmStatus.pairingState?.user_code}
+                                        </div>
+                                        {opmStatus.pairingState?.verification_uri && (
+                                            <a
+                                                href={opmStatus.pairingState.verification_uri}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-semibold"
+                                            >
+                                                Open {opmStatus.pairingState.verification_uri} <ExternalLink size={12} />
+                                            </a>
+                                        )}
+                                    </div>
+                                    <div className="flex justify-between items-center pt-1">
+                                        <span className="text-[11px] text-muted-foreground animate-pulse">Waiting for approval...</span>
+                                        <Button size="sm" variant="outline" onClick={handleCancelPairing} className="h-8 px-3 text-xs">
+                                            Cancel Pairing
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 pt-2 border-t border-border/50">
+                                    <p className="text-xs text-muted-foreground">
+                                        Connect Lazy to your O.PM Hub to explicitly push meetings, action items, risks, and decisions.
+                                    </p>
+                                    {opmStatus?.error && (
+                                        <div className="text-xs text-destructive flex items-center gap-1 bg-destructive/10 p-2 rounded">
+                                            <AlertCircle size={14} /> {opmStatus.error}
+                                        </div>
+                                    )}
+                                    <div className="flex justify-end pt-1">
+                                        <Button
+                                            size="sm"
+                                            variant="primary"
+                                            onClick={handleStartPairing}
+                                            isLoading={isPairingLoading}
+                                            className="h-8 px-4 text-xs font-bold"
+                                        >
+                                            Connect O.PM
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Theme */}

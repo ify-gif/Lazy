@@ -2,11 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, ChevronRight, ChevronDown, Folder, Save, Copy, Download, Trash2, Mic, ListChecks, ArrowRight, CheckCircle2, XCircle, Loader2, Share2, Upload } from "lucide-react";
+import { MoreVertical, ChevronRight, ChevronDown, Folder, Save, Copy, Download, Trash2, Mic, ListChecks, ArrowRight, CheckCircle2, XCircle, Loader2, Share2, Upload, Send, Link as LinkIcon } from "lucide-react";
 import Waveform from "../components/Waveform";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
-import type { Meeting, ActionItem, Thread, MeetingTemplate, LanPeer, TeamSharePacket, TeamShareEvent } from "../../main/types";
+import type { Meeting, ActionItem, Thread, MeetingTemplate, LanPeer, TeamSharePacket, TeamShareEvent, OPMBridgeStatus, OPMSchema } from "../../main/types";
 import { downloadLazyShareFile, parseLazyShareFile } from "../lib/lazyshare";
 
 type ActionItemStatus = 'idle' | 'pushing' | 'pushed' | 'failed';
@@ -40,9 +40,16 @@ const HistoryItem = ({ item, isSelected, onSelect, onMenuOpen }: HistoryItemProp
             <div className="font-bold text-[11px] leading-snug text-foreground truncate" title={item.title || "Untitled"}>
                 {item.title || "Untitled"}
             </div>
-            <span className="text-[9px] leading-none text-muted-foreground">
-                {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
-            </span>
+            <div className="flex items-center gap-1.5">
+                <span className="text-[9px] leading-none text-muted-foreground">
+                    {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
+                </span>
+                {item.pushed_at && (
+                    <span className="text-[8px] font-bold text-green-500 bg-green-500/10 px-1 py-0.2 rounded" title="Pushed to O.PM">
+                        O.PM
+                    </span>
+                )}
+            </div>
         </div>
 
         <div className="flex items-center">
@@ -198,12 +205,96 @@ export default function MeetingPage() {
         setIsThreadSubmenuOpen(false);
     };
 
-    const handleSelectMeeting = (item: Meeting) => {
+    // O.PM Bridge State
+    const [opmStatus, setOpmStatus] = useState<OPMBridgeStatus | null>(null);
+    const [opmSchema, setOpmSchema] = useState<OPMSchema | null>(null);
+    const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+    const [isPushingMeeting, setIsPushingMeeting] = useState(false);
+    const [opmPushState, setOpmPushState] = useState<{ status: 'idle' | 'pushing' | 'pushed' | 'queued' | 'error'; message?: string }>({ status: 'idle' });
+
+    const loadOPMState = async () => {
+        if (!window.electron?.opm) return;
+        try {
+            const status = await window.electron.opm.getStatus();
+            setOpmStatus(status);
+            const schema = await window.electron.opm.fetchSchema();
+            setOpmSchema(schema);
+        } catch (err) {
+            console.error("Failed to load OPM state", err);
+        }
+    };
+
+    useEffect(() => {
+        void loadOPMState();
+        if (window.electron?.opm) {
+            const unsub = window.electron.opm.onStatusChange((status) => {
+                setOpmStatus(status);
+            });
+            return () => unsub();
+        }
+    }, []);
+
+    const handleSelectMeeting = async (item: Meeting) => {
         setTitle(item.title);
         setTranscript(item.transcript);
         setSummary(item.summary);
         setSelectedMeetingId(item.id ?? null);
         setSelectedThreadId(item.thread_id ?? null);
+
+        if (item.pushed_at) {
+            setOpmPushState({ status: 'pushed', message: `Pushed at ${new Date(item.pushed_at).toLocaleTimeString()}` });
+        } else {
+            setOpmPushState({ status: 'idle' });
+        }
+
+        // Load action items from SQLite if meeting saved
+        if (item.id && window.electron?.db?.getActionItems) {
+            try {
+                const dbItems = await window.electron.db.getActionItems(item.id);
+                if (dbItems && dbItems.length > 0) {
+                    setActionItems(dbItems.map((dbIt) => ({
+                        text: dbIt.text,
+                        assignee: dbIt.assignee || undefined,
+                        due_date: dbIt.due_date || undefined,
+                        status: 'idle' as ActionItemStatus,
+                    })));
+                    setActionItemsVisible(true);
+                } else {
+                    setActionItems([]);
+                    setActionItemsVisible(false);
+                }
+            } catch (err) {
+                console.error("Failed to load action items for meeting", err);
+            }
+        }
+    };
+
+    const handlePushMeetingToOPM = async () => {
+        if (!selectedMeetingId) {
+            setAlertMessage("Please save the meeting first before pushing to O.PM.");
+            return;
+        }
+        if (!opmStatus?.connected) {
+            setAlertMessage("O.PM is not connected. Please connect in Settings.");
+            return;
+        }
+
+        setIsPushingMeeting(true);
+        setOpmPushState({ status: 'pushing' });
+
+        try {
+            const res = await window.electron.opm.pushMeeting(selectedMeetingId, selectedProjectId || null);
+            setOpmPushState({
+                status: res.pushed ? 'pushed' : 'queued',
+                message: res.pushed ? 'Pushed successfully!' : 'Queued for sync when online'
+            });
+            await loadHistory();
+        } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            setOpmPushState({ status: 'error', message: errMsg });
+        } finally {
+            setIsPushingMeeting(false);
+        }
     };
 
     const handleCreateThread = async () => {
@@ -605,6 +696,9 @@ export default function MeetingPage() {
             } else {
                 setActionItems(items.map(item => ({ ...item, status: 'idle' as ActionItemStatus })));
                 setActionItemsVisible(true);
+                if (selectedMeetingId && window.electron?.db?.saveActionItems) {
+                    await window.electron.db.saveActionItems(selectedMeetingId, items);
+                }
             }
         } catch (err) {
             console.error("Failed to extract action items", err);
@@ -1212,6 +1306,34 @@ export default function MeetingPage() {
                                     <Copy size={12} />
                                 </Button>
                             </div>
+
+                            {/* O.PM Project Selector & Push Button */}
+                            {opmSchema?.projects && opmSchema.projects.length > 0 && (
+                                <select
+                                    value={selectedProjectId}
+                                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                                    className="h-6 text-[9px] font-bold px-1.5 bg-secondary border border-border rounded-md text-foreground focus:outline-none max-w-[110px]"
+                                    title="Select O.PM Project"
+                                >
+                                    <option value="">No Project</option>
+                                    {opmSchema.projects.map((p) => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            )}
+
+                            <Button
+                                size="sm"
+                                variant={opmPushState.status === 'pushed' ? 'success' : opmPushState.status === 'queued' ? 'outline' : 'primary'}
+                                className="h-6 text-[9px] px-2 font-bold uppercase shrink-0"
+                                onClick={handlePushMeetingToOPM}
+                                disabled={!selectedMeetingId || !opmStatus?.connected || isPushingMeeting}
+                                isLoading={isPushingMeeting}
+                                title={!opmStatus?.connected ? "Connect O.PM in Settings to push meetings" : !selectedMeetingId ? "Save meeting first to push to O.PM" : "Push Meeting to O.PM Hub"}
+                            >
+                                <Send size={11} className="mr-1" />
+                                <span>{opmPushState.status === 'pushed' ? 'Pushed' : opmPushState.status === 'queued' ? 'Queued' : 'Push O.PM'}</span>
+                            </Button>
                         </div>
                     </div>
 

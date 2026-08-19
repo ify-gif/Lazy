@@ -15,6 +15,11 @@ interface Config {
     localDeviceName?: string;
     localPairingCode?: string;
     localFingerprint?: string;
+    opmBaseUrl?: string;
+    opmDeviceToken?: string;
+    opmWorkspaceId?: string;
+    opmWorkspaceName?: string;
+    opmAccountEmail?: string;
 }
 
 function readConfig(): Config {
@@ -63,6 +68,35 @@ export const Store = {
             }
         }
         return config.openaiApiKey;
+    },
+
+    setOPMToken(token: string) {
+        const config = readConfig();
+        if (!token) {
+            delete config.opmDeviceToken;
+        } else if (safeStorage.isEncryptionAvailable()) {
+            const encrypted = safeStorage.encryptString(token);
+            config.opmDeviceToken = encrypted.toString('base64');
+        } else {
+            config.opmDeviceToken = token;
+        }
+        writeConfig(config);
+    },
+
+    getOPMToken(): string {
+        const config = readConfig();
+        if (!config.opmDeviceToken) return '';
+
+        if (safeStorage.isEncryptionAvailable()) {
+            try {
+                const buffer = Buffer.from(config.opmDeviceToken, 'base64');
+                return safeStorage.decryptString(buffer);
+            } catch (err) {
+                console.error("Failed to decrypt OPM token", err);
+                return '';
+            }
+        }
+        return config.opmDeviceToken;
     },
 
     set(key: keyof Config, value: string) {

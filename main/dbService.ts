@@ -2,7 +2,8 @@ import sqlite3 from 'sqlite3';
 import { app } from 'electron';
 import path from 'path';
 import { createHash, randomUUID } from 'crypto';
-import { Meeting, WorkStory, Thread, TeamDevice, TeamTrustMode } from './types';
+import { Meeting, WorkStory, Thread, TeamDevice, TeamTrustMode, ActionItemRecord, OutboundQueueItem, BridgeSchemaCache, ActionItem } from './types';
+import { Store } from './store';
 
 const dbPath = path.join(app.getPath('userData'), 'lazy_history.db');
 
@@ -126,6 +127,71 @@ export const DBService = {
                             trust_mode TEXT NOT NULL DEFAULT 'ask',
                             last_seen_at DATETIME,
                             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `);
+                },
+            },
+            {
+                id: '009_create_action_items',
+                run: async () => {
+                    await this.run(`
+                        CREATE TABLE IF NOT EXISTS action_items (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            meeting_id INTEGER NOT NULL,
+                            target TEXT NOT NULL DEFAULT 'TASK',
+                            text TEXT NOT NULL,
+                            body TEXT,
+                            assignee TEXT,
+                            due_date TEXT,
+                            raid_type TEXT,
+                            confidence REAL NOT NULL DEFAULT 0.5,
+                            pushed_at DATETIME,
+                            external_ref TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `);
+                },
+            },
+            {
+                id: '010_add_meeting_sync_state',
+                run: async () => {
+                    await this.addColumnIfMissing('meetings', 'device_id', 'TEXT');
+                    await this.addColumnIfMissing('meetings', 'occurred_at', 'DATETIME');
+                    await this.addColumnIfMissing('meetings', 'template', 'TEXT');
+                    await this.addColumnIfMissing('meetings', 'pushed_at', 'DATETIME');
+                    await this.addColumnIfMissing('meetings', 'external_ref', 'TEXT');
+                    await this.addColumnIfMissing('meetings', 'opm_workspace_id', 'TEXT');
+                    const localDeviceId = Store.get('localDeviceId');
+                    if (localDeviceId) {
+                        await this.run("UPDATE meetings SET device_id = ? WHERE device_id IS NULL OR device_id = ''", [localDeviceId]);
+                    }
+                },
+            },
+            {
+                id: '011_create_outbound_queue',
+                run: async () => {
+                    await this.run(`
+                        CREATE TABLE IF NOT EXISTS outbound_queue (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            idempotency_key TEXT NOT NULL UNIQUE,
+                            endpoint TEXT NOT NULL,
+                            payload TEXT NOT NULL,
+                            attempts INTEGER NOT NULL DEFAULT 0,
+                            next_attempt_at DATETIME,
+                            last_error TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `);
+                },
+            },
+            {
+                id: '012_create_bridge_schema_cache',
+                run: async () => {
+                    await this.run(`
+                        CREATE TABLE IF NOT EXISTS bridge_schema_cache (
+                            id INTEGER PRIMARY KEY CHECK (id = 1),
+                            payload TEXT NOT NULL,
+                            fetched_at DATETIME NOT NULL
                         )
                     `);
                 },
@@ -479,9 +545,256 @@ export const DBService = {
         });
     },
 
+    // Action Items
+    async saveActionItems(meetingId: number, items: ActionItem[]): Promise<ActionItemRecord[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+
+        await new Promise<void>((resolve, reject) => {
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION');
+                db.run('DELETE FROM action_items WHERE meeting_id = ?', [meetingId], (err) => {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        reject(err);
+                        return;
+                    }
+                    const stmt = db.prepare(
+                        'INSERT INTO action_items (meeting_id, target, text, body, assignee, due_date, raid_type, confidence, pushed_at, external_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    );
+                    for (const item of items) {
+                        stmt.run([
+                            meetingId,
+                            item.target || 'TASK',
+                            item.text,
+                            item.body || null,
+                            item.assignee || null,
+                            item.due_date || null,
+                            item.raid_type || null,
+                            item.confidence !== undefined ? item.confidence : 0.5,
+                            item.pushed_at || null,
+                            item.external_ref || null,
+                        ]);
+                    }
+                    stmt.finalize((stmtErr) => {
+                        if (stmtErr) {
+                            db.run('ROLLBACK');
+                            reject(stmtErr);
+                            return;
+                        }
+                        db.run('COMMIT', (commitErr) => {
+                            if (commitErr) reject(commitErr);
+                            else resolve();
+                        });
+                    });
+                });
+            });
+        });
+
+        return this.getActionItems(meetingId);
+    },
+
+    async getActionItems(meetingId: number): Promise<ActionItemRecord[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.all(
+                'SELECT * FROM action_items WHERE meeting_id = ? ORDER BY id ASC',
+                [meetingId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows as ActionItemRecord[]);
+                }
+            );
+        });
+    },
+
+    async updateActionItemPushState(id: number, pushedAt: string, externalRef: string): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run(
+                'UPDATE action_items SET pushed_at = ?, external_ref = ? WHERE id = ?',
+                [pushedAt, externalRef, id],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    },
+
+    // Meeting Sync State
+    async updateMeetingSyncState(
+        meetingId: number,
+        updates: {
+            deviceId?: string;
+            occurredAt?: string;
+            template?: string;
+            pushedAt?: string;
+            externalRef?: string;
+            opmWorkspaceId?: string;
+        }
+    ): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+
+        const fields: string[] = [];
+        const values: unknown[] = [];
+
+        if (updates.deviceId !== undefined) {
+            fields.push('device_id = ?');
+            values.push(updates.deviceId);
+        }
+        if (updates.occurredAt !== undefined) {
+            fields.push('occurred_at = ?');
+            values.push(updates.occurredAt);
+        }
+        if (updates.template !== undefined) {
+            fields.push('template = ?');
+            values.push(updates.template);
+        }
+        if (updates.pushedAt !== undefined) {
+            fields.push('pushed_at = ?');
+            values.push(updates.pushedAt);
+        }
+        if (updates.externalRef !== undefined) {
+            fields.push('external_ref = ?');
+            values.push(updates.externalRef);
+        }
+        if (updates.opmWorkspaceId !== undefined) {
+            fields.push('opm_workspace_id = ?');
+            values.push(updates.opmWorkspaceId);
+        }
+
+        if (fields.length === 0) return;
+        values.push(meetingId);
+
+        const sql = `UPDATE meetings SET ${fields.join(', ')} WHERE id = ?`;
+
+        return new Promise((resolve, reject) => {
+            db.run(sql, values, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+    },
+
+    // Outbound Queue
+    async enqueueOutbound(idempotencyKey: string, endpoint: string, payload: string): Promise<number> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+
+        const existing = await this.all<OutboundQueueItem>('SELECT * FROM outbound_queue WHERE idempotency_key = ?', [idempotencyKey]);
+        if (existing.length > 0) {
+            return existing[0].id;
+        }
+
+        return new Promise((resolve, reject) => {
+            db.run(
+                'INSERT INTO outbound_queue (idempotency_key, endpoint, payload) VALUES (?, ?, ?)',
+                [idempotencyKey, endpoint, payload],
+                function (err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+    },
+
+    async getPendingOutboundQueue(): Promise<OutboundQueueItem[]> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.all(
+                "SELECT * FROM outbound_queue WHERE next_attempt_at IS NULL OR datetime(next_attempt_at) <= datetime('now') ORDER BY created_at ASC",
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows as OutboundQueueItem[]);
+                }
+            );
+        });
+    },
+
+    async getOutboundQueueCount(): Promise<number> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.get('SELECT COUNT(*) as count FROM outbound_queue', (err, row: { count: number }) => {
+                if (err) reject(err);
+                else resolve(row ? row.count : 0);
+            });
+        });
+    },
+
+    async updateOutboundAttempt(id: number, attempts: number, nextAttemptAt: string | null, lastError: string | null): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run(
+                'UPDATE outbound_queue SET attempts = ?, next_attempt_at = ?, last_error = ? WHERE id = ?',
+                [attempts, nextAttemptAt, lastError, id],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    },
+
+    async removeOutboundQueueItem(id: number): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run('DELETE FROM outbound_queue WHERE id = ?', [id], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+    },
+
+    async removeOutboundQueueItemByIdempotencyKey(key: string): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run('DELETE FROM outbound_queue WHERE idempotency_key = ?', [key], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+    },
+
+    // Bridge Schema Cache
+    async saveBridgeSchemaCache(payload: string): Promise<void> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.run(
+                "INSERT INTO bridge_schema_cache (id, payload, fetched_at) VALUES (1, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, fetched_at = CURRENT_TIMESTAMP",
+                [payload],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+    },
+
+    async getBridgeSchemaCache(): Promise<BridgeSchemaCache | null> {
+        const db = this.db;
+        if (!db) throw new Error('Database not initialized');
+        return new Promise((resolve, reject) => {
+            db.all("SELECT id, payload, fetched_at FROM bridge_schema_cache WHERE id = 1", (err, rows) => {
+                if (err) reject(err);
+                else resolve((rows && rows.length > 0) ? (rows[0] as BridgeSchemaCache) : null);
+            });
+        });
+    },
+
     createFingerprint(seed: string): string {
         const hash = createHash('sha256').update(seed).digest('hex').toUpperCase();
         const short = hash.slice(0, 12);
         return `${short.slice(0, 4)}-${short.slice(4, 8)}-${short.slice(8, 12)}`;
     }
 };
+

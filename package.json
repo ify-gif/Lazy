@@ -40,6 +40,8 @@
     },
     "win": {
       "icon": "public/app_icon_new.ico",
+      "cscLink": "certs/dev-cert.pfx",
+      "cscKeyPassword": "LazyDev2026!",
       "target": [
         "nsis"
       ]

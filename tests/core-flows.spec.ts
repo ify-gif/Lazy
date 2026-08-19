@@ -179,6 +179,7 @@ async function installElectronMock(page: Page) {
                 setBaseUrl: async (url: string) => url,
                 onStatusChange: () => () => { },
             },
+            openExternal: async () => { },
             platform: 'win32',
         };
     });

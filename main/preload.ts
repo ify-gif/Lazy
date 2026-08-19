@@ -97,5 +97,6 @@ contextBridge.exposeInMainWorld('electron', {
             return () => ipcRenderer.removeListener('opm-status-update', subscription);
         },
     },
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('app-open-external', url),
     platform: process.platform
 });

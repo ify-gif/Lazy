@@ -72,6 +72,7 @@ declare global {
                 retryDeadLetter: (id?: number) => Promise<void>;
                 onStatusChange: (callback: (data: OPMBridgeStatus) => void) => () => void;
             };
+            openExternal: (url: string) => Promise<void>;
             platform: string;
         };
     }

@@ -1,7 +1,7 @@
 import { X, Globe, Key, Mic as MicIcon, Moon, Sun, RefreshCw, Smartphone, Users, Plus, Trash2, Wifi, Link as LinkIcon, Info, ChevronDown, Pencil, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useTheme } from "next-themes";
-import { LanPeer, LocalTeamProfile, TeamDevice, TeamDiagnostics, TeamTrustMode, TeamShareEvent, UpdateEvent, OPMBridgeStatus, OPMPairingState } from "../../main/types";
+import { LanPeer, LocalTeamProfile, TeamDevice, TeamDiagnostics, TeamTrustMode, TeamShareEvent, UpdateEvent, OPMBridgeStatus } from "../../main/types";
 import Button from "./Button";
 import Input from "./Input";
 import { generatePairingCode } from "../lib/lazyshare";
@@ -52,6 +52,29 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
     const [customBaseUrl, setCustomBaseUrl] = useState("https://opmhub.app");
     const [isEditingBaseUrl, setIsEditingBaseUrl] = useState(false);
     const [isPairingLoading, setIsPairingLoading] = useState(false);
+    const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!opmStatus?.pairing || !opmStatus?.pairingState?.expires_at) {
+            setRemainingSeconds(null);
+            return;
+        }
+
+        const updateTimer = () => {
+            const expiresAt = opmStatus.pairingState!.expires_at;
+            const diff = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+            setRemainingSeconds(diff);
+            if (diff <= 0) {
+                if (window.electron?.opm) {
+                    void window.electron.opm.cancelPairing();
+                }
+            }
+        };
+
+        updateTimer();
+        const intervalId = setInterval(updateTimer, 1000);
+        return () => clearInterval(intervalId);
+    }, [opmStatus?.pairing, opmStatus?.pairingState?.expires_at]);
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -777,19 +800,33 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         </Button>
                                     </div>
                                 </div>
-                            ) : opmStatus?.pairing ? (
+                            ) : opmStatus?.pairing && remainingSeconds !== null && remainingSeconds > 0 ? (
                                 <div className="space-y-3 pt-2 border-t border-border/50 text-xs">
                                     <div className="bg-primary/10 border border-primary/20 rounded p-3 text-center space-y-2">
-                                        <p className="text-muted-foreground text-xs">Pairing code generated. Enter this code on O.PM Hub:</p>
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                                            <span>Pairing code generated. Enter this code on O.PM Hub:</span>
+                                            <span className="font-mono font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                                Expires in {Math.floor(remainingSeconds / 60)}:{(remainingSeconds % 60).toString().padStart(2, '0')}
+                                            </span>
+                                        </div>
                                         <div className="text-2xl font-extrabold tracking-widest font-mono text-primary bg-background border border-border rounded py-1 max-w-[200px] mx-auto select-all">
                                             {opmStatus.pairingState?.user_code}
                                         </div>
                                         {opmStatus.pairingState?.verification_uri && (
                                             <a
                                                 href={opmStatus.pairingState.verification_uri}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-semibold"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    const uri = opmStatus.pairingState?.verification_uri;
+                                                    if (uri) {
+                                                        if (window.electron?.openExternal) {
+                                                            void window.electron.openExternal(uri);
+                                                        } else {
+                                                            window.open(uri, '_blank');
+                                                        }
+                                                    }
+                                                }}
+                                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-semibold cursor-pointer"
                                             >
                                                 Open {opmStatus.pairingState.verification_uri} <ExternalLink size={12} />
                                             </a>
@@ -799,6 +836,46 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                         <span className="text-[11px] text-muted-foreground animate-pulse">Waiting for approval...</span>
                                         <Button size="sm" variant="outline" onClick={handleCancelPairing} className="h-8 px-3 text-xs">
                                             Cancel Pairing
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : opmStatus?.error?.toLowerCase().includes('denied') ? (
+                                <div className="space-y-3 pt-2 border-t border-border/50 text-xs">
+                                    <div className="bg-destructive/10 border border-destructive/20 rounded p-3 text-center space-y-2">
+                                        <div className="text-xs font-semibold text-destructive flex items-center justify-center gap-1">
+                                            <AlertCircle size={14} /> Pairing request was denied
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground">The request was denied on O.PM Hub. You can start a fresh pairing anytime.</p>
+                                    </div>
+                                    <div className="flex justify-end pt-1">
+                                        <Button
+                                            size="sm"
+                                            variant="primary"
+                                            onClick={handleStartPairing}
+                                            isLoading={isPairingLoading}
+                                            className="h-8 px-4 text-xs font-bold"
+                                        >
+                                            Start Fresh Pairing
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : remainingSeconds === 0 || opmStatus?.error?.toLowerCase().includes('expired') ? (
+                                <div className="space-y-3 pt-2 border-t border-border/50 text-xs">
+                                    <div className="bg-amber-500/10 border border-amber-500/20 rounded p-3 text-center space-y-2">
+                                        <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center justify-center gap-1">
+                                            <AlertCircle size={14} /> Pairing code expired
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground">The 10-minute pairing window has elapsed. Generate a new code to pair.</p>
+                                    </div>
+                                    <div className="flex justify-end pt-1">
+                                        <Button
+                                            size="sm"
+                                            variant="primary"
+                                            onClick={handleStartPairing}
+                                            isLoading={isPairingLoading}
+                                            className="h-8 px-4 text-xs font-bold"
+                                        >
+                                            Start Fresh Pairing
                                         </Button>
                                     </div>
                                 </div>

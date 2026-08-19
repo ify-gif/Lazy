@@ -263,6 +263,9 @@ test.before((t, done) => {
               account_email: "test@example.com",
             })
           );
+        } else if (payload.device_code === "denied-code") {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "access_denied" }));
         } else {
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "expired_token" }));
@@ -539,6 +542,47 @@ test("Items exceeding MAX_ATTEMPTS (12) are dead-lettered and excluded from pend
   const pendingAfterRetry = await DBService.getPendingOutboundQueue();
   assert.equal(pendingAfterRetry.length, 1);
   assert.equal(pendingAfterRetry[0].attempts, 0);
+});
+
+test("OPM pollToken stops polling when pairing code countdown reaches zero (expires_at)", async () => {
+  OPMBridgeService.cancelPairing();
+  OPMBridgeService.pairingState = {
+    device_code: "code-expired-123",
+    user_code: "EXPR-1234",
+    verification_uri: "http://localhost/verify",
+    interval: 5,
+    expires_in: 600,
+    expires_at: Date.now() - 1000,
+  };
+  OPMBridgeService.pairingTimer = setTimeout(() => {}, 60000);
+
+  await OPMBridgeService.pollToken("code-expired-123", 5);
+
+  assert.equal(OPMBridgeService.pairingTimer, null);
+  assert.equal(OPMBridgeService.pairingState, null);
+  const status = await OPMBridgeService.getStatus();
+  assert.equal(status.pairing, false);
+  assert.ok(status.error && status.error.toLowerCase().includes("expired"));
+});
+
+test("OPM pollToken cancels pairing and sets denied error when server returns access_denied", async () => {
+  Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
+  OPMBridgeService.cancelPairing();
+  OPMBridgeService.pairingState = {
+    device_code: "denied-code",
+    user_code: "DENY-1234",
+    verification_uri: "http://localhost/verify",
+    interval: 1,
+    expires_in: 600,
+    expires_at: Date.now() + 600000,
+  };
+
+  await OPMBridgeService.pollToken("denied-code", 1);
+
+  assert.equal(OPMBridgeService.pairingState, null);
+  const status = await OPMBridgeService.getStatus();
+  assert.equal(status.pairing, false);
+  assert.ok(status.error && status.error.toLowerCase().includes("denied"));
 });
 
 test.after(async () => {

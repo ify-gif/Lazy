@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
@@ -12,6 +12,19 @@ let staticServer: http.Server | null = null;
 const localRateWindowMs = 10_000;
 const localRateMaxRequests = 200;
 const requestCounters = new Map<string, { count: number; resetAt: number }>();
+
+function safeOpenExternal(targetUrl: string): void {
+    try {
+        const parsed = new URL(targetUrl);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+            void shell.openExternal(targetUrl);
+        } else {
+            logger.warn(`Blocked openExternal request for non-http(s) scheme: ${targetUrl}`);
+        }
+    } catch (err) {
+        logger.error(`Invalid URL provided to safeOpenExternal: ${targetUrl}`, err);
+    }
+}
 
 const MIME_TYPES: Record<string, string> = {
     '.html': 'text/html; charset=utf-8',
@@ -115,7 +128,7 @@ async function startStaticServer(outDir: string): Promise<string> {
         res.writeHead(200, {
             'Content-Type': contentType,
             'X-Content-Type-Options': 'nosniff',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;"
+            'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;"
         });
         res.end(content);
     });
@@ -160,6 +173,25 @@ async function createWindow() {
     const appUrl = dev
         ? 'http://localhost:3000'
         : await startStaticServer(path.join(__dirname, '../out'));
+
+    const appOrigin = new URL(appUrl).origin;
+
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        safeOpenExternal(url);
+        return { action: 'deny' };
+    });
+
+    mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+        try {
+            const parsed = new URL(navigationUrl);
+            if (parsed.origin !== appOrigin) {
+                event.preventDefault();
+                safeOpenExternal(navigationUrl);
+            }
+        } catch {
+            event.preventDefault();
+        }
+    });
 
     logger.info(`Loading URL: ${appUrl}`);
     mainWindow.loadURL(appUrl);
@@ -425,6 +457,10 @@ ipcMain.on('app-status-update', (_event, { status, message }) => {
 
 ipcMain.handle('get-app-version', () => {
     return app.getVersion();
+});
+
+ipcMain.handle('app-open-external', (_event, targetUrl: string) => {
+    safeOpenExternal(targetUrl);
 });
 
 ipcMain.handle('team-get-local-profile', () => {

@@ -610,6 +610,37 @@ test("expirePairing leaves error message while cancelPairing does not", async ()
   assert.equal(status.error, null);
 });
 
+test("pushMeeting during in-flight background drain waits for drain and returns pushed: true", async () => {
+  await resetDbState();
+
+  Store.setOPMToken("mock-access-token-xyz");
+  Store.set("opmBaseUrl", `http://127.0.0.1:${mockServerPort}`);
+
+  const meetingId = await DBService.saveMeeting(
+    "Concurrent Push Test Meeting",
+    "Transcript text...",
+    "## Summary\nTest summary"
+  );
+
+  // Enqueue a dummy item to simulate an in-flight background drain
+  const dummyKey = "lazy:device-test-1:slow-item";
+  await DBService.enqueueOutbound(dummyKey, "/api/bridge/meetings", JSON.stringify({ kind: "dummy" }));
+
+  // Start background drain
+  const firstDrain = OPMBridgeService.drainQueue();
+
+  // Call pushMeeting while firstDrain is in-flight
+  const result = await OPMBridgeService.pushMeeting(meetingId, null);
+  await firstDrain;
+
+  assert.equal(result.queued, false);
+  assert.equal(result.pushed, true);
+
+  const updatedMeetings = await DBService.getMeetings();
+  const updated = updatedMeetings.find((m) => m.id === meetingId);
+  assert.ok(updated.pushed_at);
+});
+
 
 test.after(async () => {
   if (mockServer) {

@@ -40,9 +40,13 @@ interface TokenErrorResponse {
 export const OPMBridgeService = {
     pairingTimer: null as NodeJS.Timeout | null,
     pairingState: null as OPMPairingState | null,
-    isDrainingQueue: false,
+    drainPromise: null as Promise<void> | null,
     drainTimer: null as NodeJS.Timeout | null,
     lastError: null as string | null,
+
+    get isDrainingQueue(): boolean {
+        return this.drainPromise !== null;
+    },
 
     getBaseUrl(): string {
         const custom = Store.get('opmBaseUrl');
@@ -452,7 +456,8 @@ export const OPMBridgeService = {
         // Enqueue outbound request
         await DBService.enqueueOutbound(idempotencyKey, '/api/bridge/meetings', JSON.stringify(pushPayload));
 
-        // Immediately attempt queue drain
+        // Immediately attempt queue drain (double drain ensures in-flight drains resolve before our item is processed)
+        await this.drainQueue();
         await this.drainQueue();
         this.broadcastStatus();
 
@@ -466,11 +471,17 @@ export const OPMBridgeService = {
 
     // --- OUTBOUND QUEUE DRAIN LOOP ---
     async drainQueue(): Promise<void> {
-        if (this.isDrainingQueue) return;
+        if (this.drainPromise) return this.drainPromise;
         const token = Store.getOPMToken();
         if (!token) return;
 
-        this.isDrainingQueue = true;
+        this.drainPromise = this.runDrain().finally(() => {
+            this.drainPromise = null;
+        });
+        return this.drainPromise;
+    },
+
+    async runDrain(): Promise<void> {
         try {
             const pendingItems = await DBService.getPendingOutboundQueue();
             for (const item of pendingItems) {
@@ -482,7 +493,6 @@ export const OPMBridgeService = {
         } catch (err) {
             logger.error('Error during outbound queue drain', err);
         } finally {
-            this.isDrainingQueue = false;
             this.broadcastStatus();
         }
     },

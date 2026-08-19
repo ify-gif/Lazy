@@ -1,6 +1,6 @@
 {
   "name": "lazy-electron",
-  "version": "1.2.14",
+  "version": "1.2.15",
   "description": "Strategic Consultant Second Brain",
   "author": "Ify Gold",
   "private": true,
@@ -40,8 +40,6 @@
     },
     "win": {
       "icon": "public/app_icon_new.ico",
-      "cscLink": "certs/dev-cert.pfx",
-      "cscKeyPassword": "LazyDev2026!",
       "target": [
         "nsis"
       ]
@@ -75,6 +73,7 @@
     "test:ipc-contract": "node --test tests/ipc-contract.test.mjs",
     "electron-dev": "node scripts/dev-up.mjs",
     "electron-build": "next build && tsc --build tsconfig.server.json --force && electron-builder",
+    "electron-build-signed": "cross-env WIN_CSC_LINK=certs/dev-cert.pfx WIN_CSC_KEY_PASSWORD=LazyDev2026! npm run electron-build",
     "electron-smoke": "node scripts/smoke-packaged.mjs",
     "electron-build-verified": "npm run electron-build && npm run electron-smoke",
     "electron-build-fresh": "npm run clean && npm run verify:installer-config && npm run electron-build-verified",

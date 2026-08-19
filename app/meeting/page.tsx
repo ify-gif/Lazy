@@ -1333,7 +1333,12 @@ export default function MeetingPage() {
                                 </Button>
                             </div>
 
-                            {/* O.PM Project Selector & Push Button */}
+                            {/* O.PM Connection Status & Push Controls */}
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/60 bg-muted/30 text-[10px]" title={opmStatus?.connected ? "O.PM Connected" : "O.PM Disconnected"}>
+                                <span className={`w-2 h-2 rounded-full ${opmStatus?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">O.PM</span>
+                            </div>
+
                             {opmSchema?.projects && opmSchema.projects.length > 0 && (
                                 <select
                                     value={selectedProjectId}

@@ -701,16 +701,16 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
                                 <LinkIcon size={14} /> O.PM Hub Bridge
                             </div>
                             {opmStatus?.connected ? (
-                                <span className="flex items-center gap-1 text-[10px] text-green-500 font-bold lowercase tracking-normal">
-                                    <CheckCircle2 size={12} /> connected
+                                <span className="flex items-center gap-1.5 text-[11px] text-emerald-500 font-semibold lowercase tracking-normal bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> connected
                                 </span>
                             ) : opmStatus?.pairing ? (
-                                <span className="flex items-center gap-1 text-[10px] text-amber-500 font-bold lowercase tracking-normal animate-pulse">
-                                    pairing...
+                                <span className="flex items-center gap-1.5 text-[11px] text-amber-500 font-semibold lowercase tracking-normal bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full animate-pulse">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500" /> pairing...
                                 </span>
                             ) : (
-                                <span className="text-[10px] text-muted-foreground font-normal lowercase tracking-normal">
-                                    disconnected
+                                <span className="flex items-center gap-1.5 text-[11px] text-red-500 font-semibold lowercase tracking-normal bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">
+                                    <span className="w-2 h-2 rounded-full bg-red-500" /> disconnected
                                 </span>
                             )}
                         </div>
@@ -748,8 +748,25 @@ export default function SettingsModal({ isOpen, onClose, onApiKeyValidated }: Se
 
                             {/* Status Specific UI */}
                             {opmStatus?.connected ? (
-                                <div className="space-y-2 pt-2 border-t border-border/50 text-xs">
-                                    <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                                <div className="space-y-3 pt-2 border-t border-border/50 text-xs">
+                                    {/* OPM Logo Card */}
+                                    <div className="flex items-center gap-3.5 p-3 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 rounded-xl">
+                                        <div className="relative p-1.5 bg-background rounded-lg border border-border/80 shadow-sm shrink-0 flex items-center justify-center">
+                                            <img src="/opm-logo.png" alt="O.PM Logo" className="h-7 w-auto object-contain max-w-[120px]" />
+                                            <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-background rounded-full" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-xs text-foreground tracking-tight">O.PM Hub Connected</span>
+                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground truncate">
+                                                {opmStatus.workspaceName || 'Default Workspace'} &bull; {opmStatus.accountEmail || 'Active'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40">
                                         <div>
                                             <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Account</span>
                                             <span className="font-medium text-foreground">{opmStatus.accountEmail || 'Connected'}</span>
